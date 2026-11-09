@@ -137,19 +137,26 @@ window.CC = window.CC || {};
     return g;
   }
   // engine bell pointing backwards (-Z) with a glowing throat and a flame plume
+  // fm: faction materials {hull, hull2, glow, flame, colour}; true = the default enemy look
+  function fmats(enemy) {
+    if (!enemy) return null;
+    if (enemy === true) return { hull: M.eHull, hull2: M.eHull2, glow: M.eGlow, flame: M.eFlame, colour: ENEMY_GLOW };
+    return enemy;
+  }
   function engine(parent, x, y, z, r, len, enemy) {
+    enemy = fmats(enemy);
     const e = new THREE.Group();
     const prof = [new THREE.Vector2(r * 0.75, 0), new THREE.Vector2(r, len * 0.3), new THREE.Vector2(r * 0.85, len * 0.6), new THREE.Vector2(r * 1.15, len)];
     const bell = new THREE.LatheGeometry(prof, 16); bell.rotateX(-Math.PI / 2);
     e.add(new THREE.Mesh(bell, M.nozzle));
     const throat = new THREE.CircleGeometry(r * 0.8, 16); throat.rotateY(Math.PI);
-    part(throat, enemy ? M.eGlow : M.light, 0, 0, -len * 0.35, e);
+    part(throat, enemy ? enemy.glow : M.light, 0, 0, -len * 0.35, e);
     const flame = new THREE.LatheGeometry([new THREE.Vector2(r * 0.8, 0), new THREE.Vector2(r * 0.55, 0.4), new THREE.Vector2(0.01, 1)], 12);
     flame.rotateX(-Math.PI / 2);
-    const plume = part(flame, enemy ? M.eFlame : M.flame, 0, 0, -len * 0.9, e);
+    const plume = part(flame, enemy ? enemy.flame : M.flame, 0, 0, -len * 0.9, e);
     plume.scale.set(1, 1, len * 2.2);
     plume.userData.plume = len * 2.2;
-    const glow = glowSprite(enemy ? ENEMY_GLOW : COL.light, r * 5, 0.8); glow.position.z = -len; e.add(glow);
+    const glow = glowSprite(enemy ? enemy.colour : COL.light, r * 5, 0.8); glow.position.z = -len; e.add(glow);
     glow.userData.engineGlow = r * 5;
     e.position.set(x, y, z);
     e.userData.engine = true;
@@ -157,11 +164,12 @@ window.CC = window.CC || {};
     return e;
   }
   function turret(parent, x, y, z, s, enemy) {
+    enemy = fmats(enemy);
     const t = new THREE.Group();
-    part(new THREE.CylinderGeometry(0.45 * s, 0.55 * s, 0.25 * s, 12), enemy ? M.eHull2 : M.hullDark, 0, 0, 0, t);
-    const head = part(new THREE.BoxGeometry(0.7 * s, 0.35 * s, 0.75 * s), enemy ? M.eHull : M.hull, 0, 0.25 * s, 0, t);
+    part(new THREE.CylinderGeometry(0.45 * s, 0.55 * s, 0.25 * s, 12), enemy ? enemy.hull2 : M.hullDark, 0, 0, 0, t);
+    const head = part(new THREE.BoxGeometry(0.7 * s, 0.35 * s, 0.75 * s), enemy ? enemy.hull : M.hull, 0, 0.25 * s, 0, t);
     for (const bx of [-0.15, 0.15]) part(alongZ(new THREE.CylinderGeometry(0.06 * s, 0.07 * s, 1.1 * s, 6)), M.panel, bx * s, 0.27 * s, 0.75 * s, t);
-    head.add(part(new THREE.BoxGeometry(0.72 * s, 0.05 * s, 0.2 * s), enemy ? M.eGlow : M.stripe, 0, 0.12 * s, -0.2 * s));
+    head.add(part(new THREE.BoxGeometry(0.72 * s, 0.05 * s, 0.2 * s), enemy ? enemy.glow : M.stripe, 0, 0.12 * s, -0.2 * s));
     t.position.set(x, y, z);
     t.userData.turret = true;
     parent.add(t);
@@ -357,26 +365,139 @@ window.CC = window.CC || {};
     return m;
   }
 
-  function hive() {
+  function hive(f) {
     materials();
+    const fm = f ? f.mats : fmats(true);
+    const shape = f ? f.hive : 'spikes';
     const g = new THREE.Group();
-    g.add(part(new THREE.IcosahedronGeometry(4.5, 1), M.eHull));
+    g.add(part(new THREE.IcosahedronGeometry(4.5, shape === 'smooth' ? 2 : 1), fm.hull));
     const dirs = new THREE.IcosahedronGeometry(1, 0).attributes.position;
     const seen = {};
     for (let i = 0; i < dirs.count; i++) {
       const v = new THREE.Vector3(dirs.getX(i), dirs.getY(i), dirs.getZ(i)).normalize();
       const k = v.toArray().map((n) => n.toFixed(2)).join();
       if (seen[k]) continue; seen[k] = 1;
-      const spike = part(new THREE.ConeGeometry(0.8, 4.5, 6), M.eHull2);
-      spike.position.copy(v).multiplyScalar(5.6);
+      let spike;
+      if (shape === 'pods') spike = part(new THREE.SphereGeometry(1.1, 10, 8), fm.hull2);
+      else if (shape === 'blocks') spike = part(new THREE.BoxGeometry(1.4, 2.4, 1.4), fm.hull2);
+      else spike = part(new THREE.ConeGeometry(0.8, 4.5, 6), fm.hull2);
+      spike.position.copy(v).multiplyScalar(shape === 'spikes' ? 5.6 : 4.8);
       spike.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v);
       g.add(spike);
-      const tip = glowSprite(ENEMY_GLOW, 1.8); tip.position.copy(v).multiplyScalar(8); g.add(tip);
+      const tip = glowSprite(fm.colour, 1.8); tip.position.copy(v).multiplyScalar(shape === 'spikes' ? 8 : 6.2); g.add(tip);
     }
-    g.add(part(new THREE.TorusGeometry(6.2, 0.3, 6, 40), M.eGlow));
-    const ring2 = part(new THREE.TorusGeometry(7.2, 0.15, 6, 40), M.eGlow); ring2.rotation.x = Math.PI / 2; g.add(ring2);
-    const core = glowSprite(ENEMY_GLOW, 18, 0.55); g.add(core);
+    g.add(part(new THREE.TorusGeometry(6.2, 0.3, 6, 40), fm.glow));
+    const ring2 = part(new THREE.TorusGeometry(7.2, 0.15, 6, 40), fm.glow); ring2.rotation.x = Math.PI / 2; g.add(ring2);
+    const core = glowSprite(fm.colour, 18, 0.55); g.add(core);
     return { group: g, core: core, size: 7 };
+  }
+
+  // ---------- Faction ships: shapes coloured by each sector's materials ----------
+  function factionMats(hullColour, hull2Colour, glowColour) {
+    materials();
+    return {
+      hull: new THREE.MeshStandardMaterial({ color: hullColour, metalness: 0.65, roughness: 0.4 }),
+      hull2: new THREE.MeshStandardMaterial({ color: hull2Colour, metalness: 0.7, roughness: 0.5 }),
+      glow: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: glowColour, emissiveIntensity: 1, metalness: 0, roughness: 1 }),
+      flame: new THREE.MeshBasicMaterial({ color: glowColour, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8, depthWrite: false }),
+      colour: glowColour
+    };
+  }
+
+  const SHAPES = {
+    // light ships
+    claw(m) {
+      const g = new THREE.Group();
+      part(topHull([[0, 2.0], [0.5, 0.6], [1.9, 1.3], [1.4, -0.3], [2.1, -1.5], [0.5, -1.0], [0, -1.4], [-0.5, -1.0], [-2.1, -1.5], [-1.4, -0.3], [-1.9, 1.3], [-0.5, 0.6]], 0.16, 0.05), m.hull, 0, 0, 0, g);
+      part(sideHull([[2.0, 0], [0.8, 0.35], [-1.2, 0.3], [-1.4, -0.1], [0.5, -0.25]], 0.55, 0.06), m.hull2, 0, 0, 0, g);
+      const eye = part(new THREE.SphereGeometry(0.16, 10, 8), m.glow, 0, 0.3, 1.0, g); eye.scale.set(1.6, 0.6, 1);
+      for (const sx of [-1, 1]) { const st = part(new THREE.BoxGeometry(0.06, 0.04, 1.3), m.glow, sx * 1.3, 0.12, 0.4, g); st.rotation.y = -sx * 0.6; }
+      engine(g, 0, 0.05, -1.3, 0.2, 0.45, m);
+      return { g: g, size: 2.0 };
+    },
+    dart(m) {
+      const g = new THREE.Group();
+      part(sideHull([[2.6, 0], [1.0, 0.3], [-1.6, 0.35], [-1.8, -0.1], [-1.6, -0.3], [1.0, -0.2]], 0.5, 0.05), m.hull, 0, 0, 0, g);
+      for (const sx of [-1, 1]) {
+        const fin = part(topHull([[0, 0.4], [1.3, -1.2], [1.3, -1.5], [0, -1.0]].map((p) => [p[0] * sx, p[1]]), 0.08, 0.03), m.hull2, 0, 0, 0, g);
+        fin.rotation.z = sx * 0.25;
+        part(new THREE.BoxGeometry(0.05, 0.05, 1.0), m.glow, sx * 0.9, 0.12, -0.7, g);
+      }
+      part(new THREE.SphereGeometry(0.14, 8, 6), m.glow, 0, 0.3, 0.8, g);
+      engine(g, 0, 0, -1.8, 0.22, 0.5, m);
+      return { g: g, size: 1.9 };
+    },
+    saucer(m) {
+      const g = new THREE.Group();
+      const disc = new THREE.LatheGeometry([new THREE.Vector2(0.01, -0.35), new THREE.Vector2(1.4, -0.12), new THREE.Vector2(1.6, 0), new THREE.Vector2(1.2, 0.2), new THREE.Vector2(0.5, 0.45), new THREE.Vector2(0.01, 0.5)], 18);
+      part(disc, m.hull, 0, 0, 0, g);
+      part(new THREE.TorusGeometry(1.45, 0.06, 6, 30), m.glow, 0, 0, 0, g).rotation.x = Math.PI / 2;
+      part(new THREE.SphereGeometry(0.42, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), m.glow, 0, 0.35, 0, g);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; part(new THREE.BoxGeometry(0.2, 0.12, 0.5), m.hull2, Math.cos(a) * 1.0, 0.12, Math.sin(a) * 1.0, g).rotation.y = -a; }
+      engine(g, 0, -0.1, -1.4, 0.2, 0.4, m);
+      return { g: g, size: 1.9 };
+    },
+    spiky(m) {
+      const g = new THREE.Group();
+      const core = part(new THREE.OctahedronGeometry(0.9), m.hull, 0, 0, 0, g); core.scale.set(0.8, 0.6, 1.8);
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * Math.PI * 2;
+        const sp = part(new THREE.ConeGeometry(0.12, 1.4, 4), m.hull2, Math.cos(a) * 0.7, Math.sin(a) * 0.5, -0.2, g);
+        sp.rotation.z = a - Math.PI / 2; sp.rotation.x = -0.4;
+      }
+      part(alongZ(new THREE.ConeGeometry(0.2, 1.2, 6)), m.glow, 0, 0, 1.9, g);
+      engine(g, 0, 0, -1.6, 0.24, 0.45, m);
+      return { g: g, size: 1.9 };
+    },
+    orb(m) {
+      const g = new THREE.Group();
+      part(new THREE.IcosahedronGeometry(1.1, 1), m.hull, 0, 0, 0, g);
+      for (const sx of [-1, 1]) part(new THREE.TorusGeometry(1.25, 0.08, 6, 24), m.glow, 0, 0, 0, g).rotation.set(Math.PI / 2, sx * 0.5, 0);
+      for (const sx of [-1, 1]) part(new THREE.BoxGeometry(0.3, 0.3, 1.2), m.hull2, sx * 1.2, 0, -0.4, g);
+      part(new THREE.SphereGeometry(0.3, 10, 8), m.glow, 0, 0, 1.0, g);
+      engine(g, 0, 0, -1.2, 0.25, 0.4, m);
+      return { g: g, size: 1.9 };
+    },
+    // heavy ships
+    wedge(m) {
+      const g = new THREE.Group();
+      part(sideHull([[5, 0], [2.5, 0.9], [-3.5, 1.0], [-4.2, 0.2], [-4.2, -0.9], [2, -0.8]], 1.8, 0.14), m.hull, 0, 0, 0, g);
+      part(topHull([[0, 4.5], [2.6, -0.5], [3.4, -3.5], [1.4, -2.8], [0, -4.2], [-1.4, -2.8], [-3.4, -3.5], [-2.6, -0.5]], 0.25, 0.08), m.hull2, 0, -0.2, 0, g);
+      for (const sx of [-1, 1]) { part(new THREE.BoxGeometry(0.05, 0.1, 6), m.glow, sx * 0.95, 0.3, 0.3, g); engine(g, sx * 0.8, 0, -4.3, 0.4, 0.8, m); }
+      turret(g, 0, 1.0, 1.5, 1.0, m); turret(g, 0, 1.0, -1.2, 1.0, m);
+      return { g: g, size: 4.6 };
+    },
+    block(m) {
+      const g = new THREE.Group();
+      part(new THREE.BoxGeometry(3, 2, 7), m.hull, 0, 0, 0, g);
+      part(new THREE.BoxGeometry(3.4, 0.6, 5), m.hull2, 0, 1.2, -0.5, g);
+      part(new THREE.BoxGeometry(2.4, 1.2, 1), m.hull2, 0, 0, 3.9, g);
+      for (const sx of [-1, 1]) { part(new THREE.BoxGeometry(0.06, 0.3, 6.4), m.glow, sx * 1.52, 0.3, 0, g); for (const sy of [-0.5, 0.5]) engine(g, sx * 0.8, sy, -3.6, 0.35, 0.7, m); }
+      turret(g, 0, 1.55, 1.2, 1.1, m); turret(g, 0, 1.55, -1.8, 1.1, m);
+      return { g: g, size: 4.6 };
+    },
+    crescent(m) {
+      const g = new THREE.Group();
+      const arc = part(new THREE.TorusGeometry(3, 0.7, 8, 24, Math.PI * 1.3), m.hull, 0, 0, 0, g);
+      arc.rotation.set(Math.PI / 2, 0, Math.PI * 0.85);
+      part(new THREE.SphereGeometry(1.3, 14, 10), m.hull2, 0, 0, -1.6, g);
+      part(new THREE.TorusGeometry(3, 0.12, 6, 24, Math.PI * 1.3), m.glow, 0, 0.6, 0, g).rotation.set(Math.PI / 2, 0, Math.PI * 0.85);
+      engine(g, 0, 0, -2.9, 0.5, 0.8, m);
+      turret(g, 0, 1.2, -1.6, 1.0, m);
+      return { g: g, size: 4.4 };
+    }
+  };
+
+  const factionTemplates = {};
+  function factionShip(f, kind) {
+    const shape = kind === 'heavy' ? f.heavyShape : f.lightShape;
+    const key = f.id + ':' + shape;
+    if (!factionTemplates[key]) factionTemplates[key] = SHAPES[shape](f.mats);
+    const t = factionTemplates[key];
+    const g = t.g.clone(true);
+    const info = { group: g, engines: [], turrets: [], drill: null, size: t.size };
+    g.traverse((o) => { if (o.userData.engine) info.engines.push(o); if (o.userData.turret) info.turrets.push(o); });
+    return info;
   }
 
   // Environment map so the metal has something to reflect
@@ -651,6 +772,6 @@ window.CC = window.CC || {};
 
   COL.enemy = ENEMY_GLOW;
   CC.COL = COL;
-  CC.models = { environment: environment, fighter: fighter, cruiser: cruiser, harvester: harvester, mothership: mothership, raider: raider, destroyer: destroyer, hive: hive, comet: comet, asteroid: asteroid, glowSprite: glowSprite, ringSprite: ringSprite, backdrop: backdrop };
+  CC.models = { factionMats: factionMats, factionShip: factionShip, environment: environment, fighter: fighter, cruiser: cruiser, harvester: harvester, mothership: mothership, raider: raider, destroyer: destroyer, hive: hive, comet: comet, asteroid: asteroid, glowSprite: glowSprite, ringSprite: ringSprite, backdrop: backdrop };
   CC.fx = { trail: trail, setScene: setScene, bolt: bolt, spark: spark, explosion: explosion, shieldFlash: shieldFlash, line: line, update: update, clear: clear };
 })(window.CC);

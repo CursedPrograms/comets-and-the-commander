@@ -26,37 +26,50 @@
 
 # Comet & Commander
 
-A 3D space RTS that runs in the browser. Your Commander carrier sits at the centre of a sphere of space and the battle happens all around it: mine comets and asteroids, build a fleet, research upgrades and destroy the three enemy hives before their waves destroy you.
+A 3D space RTS that runs in the browser. You fly the Commander, a carrier, through a sphere of space made of ten sectors, each held by a different enemy faction. The battle happens all around you: mine comets and asteroids, build a fleet, research upgrades and conquer every sector.
 
 **Play it:** [cursedprograms.github.io/comet-and-commander](https://cursedprograms.github.io/comet-and-commander/)
 
+![A battle around the Commander](images/battle.jpg)
+
 ## Gameplay
 
-- **Economy:** harvesters mine comets and asteroids on their own and carry the ore back to the Commander. Spend ore on ships and upgrades, built one at a time in the Commander's queue.
-- **Ships:** fighters (fast interceptors that dogfight), cruisers (heavy capital ships with turrets) and harvesters (industrial miners with a drill).
-- **Upgrades:** weapons, armour and mining, three levels each.
-- **Enemy:** three hives at the edge of the sphere guard themselves and send growing waves of raiders and destroyers.
-- **Commander:** repairs ships near it, defends itself with turrets and can set a rally point for new ships.
-- Explosions, sound effects and voice responses when you select or order ships.
+- **Ten sectors, ten factions.** Each sector has its own enemy with its own colours, ship designs and tactics: Rust Drones swarm, Ice Wraiths hunt your harvesters, Crimson Reavers ram, Void Lancers snipe from range, Gold Sentinels repair themselves, Teal Menders heal each other, Amber Splitters burst into smaller ships, the Obsidian Guard is shielded, and the Pale Choir in the last sector does all of it. Destroy every hive in a sector to conquer it; conquer all ten to win.
+- **Fly anywhere.** Select the Commander and right-click to move it, or pick a sector on the sector map. The battle sphere and your idle warships travel with you.
+- **Economy.** Harvesters mine comets and asteroids near the Commander and bring the ore home. Spend it on fighters, cruisers and more harvesters, built in the Commander's queue.
+- **Research.** Weapons, hulls, mining and logistics (cheaper, faster ships), three levels each. Conquering a sector pays a bonus.
+- **Comets.** Now and then a comet streaks in from any direction. A blinking line, an alarm and a voice warning give you a few seconds to get out of its way; it tears through anything it hits.
+- **Menu, music and saves.** A main menu with the main theme, two in-game tracks that crossfade between calm and battle, sound effects, Piper voice lines, and an automatic save you can continue later.
+
+| | |
+| --- | --- |
+| ![Main menu](images/menu.jpg) | ![Sector map](images/sector-map.jpg) |
+| ![Box selection](images/selection-box.jpg) | ![Selected ships with health bars](images/selected.jpg) |
+| ![Explosions](images/explosion.jpg) | ![A comet streaking in](images/comet.jpg) |
+
+![Your ships (top row) and some of the enemy factions](images/ships.jpg)
 
 ## Controls
 
 | | Mouse | Touch |
 | --- | --- | --- |
 | Select | Click a ship, drag a box, Shift adds, double-click picks every ship of that type | Tap a ship |
-| Order | Right-click space to move, an enemy to attack, a comet to mine | Tap where to go |
+| Order | Right-click space to move, an enemy to attack, a comet to mine; with the Commander selected, right-click flies it | Tap where to go |
 | View | Right-drag turns the view 360 degrees round you, wheel zooms | Drag, pinch |
 
-Keys: F/C/H build, X army, Z harvesters, B base, Ctrl+1-9 make a group and 1-9 pick it, WASD or arrows turn the view, Q/E zoom, P pause, M sound.
+Keys: F/C/H build, X army, Z harvesters, B Commander, N sector map, Ctrl+1-9 make a group and 1-9 pick it, WASD or arrows turn the view, Q/E zoom, P pause, M sound, Esc menu.
 
 ## Files
 
 - `index.html` - the page
 - `styles/style.css` - layout and colours
-- `scripts/game.js` - game logic, input, HUD and radar
+- `scripts/game.js` - game logic, sectors, input, HUD, radar, menu and saves
+- `scripts/factions.js` - the ten enemy factions
 - `scripts/models.js` - ship models, backdrop and effects (three.js r128)
-- `scripts/audio.js` - synthesised sound effects and voice playback
+- `scripts/audio.js` - music, synthesised sound effects and voice playback
+- `audio/music/` - the soundtrack
 - `audio/voice/` - voice lines, generated with [Piper](https://github.com/rhasspy/piper) TTS (Amy and Ryan voices)
+- `images/` - screenshots
 
 <br>
 <div align="center">

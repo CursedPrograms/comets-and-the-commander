@@ -79,6 +79,22 @@ window.CC = window.CC || {};
     mine() { if (allowed('mine', 0.35)) tone('sine', 220 + Math.random() * 80, 180, 0.08, 0.025); },
     deposit() { if (allowed('deposit', 0.2)) { tone('sine', 1046, 1046, 0.08, 0.05); tone('sine', 1318, 1318, 0.1, 0.05, 0.07); } },
     upgrade() { if (allowed('upgrade', 0.2)) [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, f, 0.15, 0.08, i * 0.08)); },
+    // comet warning: a rising two-tone alarm
+    warning() {
+      if (!allowed('warning', 1)) return;
+      for (let i = 0; i < 3; i++) { tone('square', 660, 990, 0.16, 0.07, i * 0.36); tone('square', 990, 660, 0.16, 0.07, i * 0.36 + 0.18); }
+    },
+    // comet rushing past
+    whoosh() {
+      if (!allowed('whoosh', 0.5)) return;
+      const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noise; s.loop = true;
+      f.type = 'bandpass'; f.Q.value = 2;
+      f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(2400, t + 1.2); f.frequency.exponentialRampToValueAtTime(200, t + 2.2);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+      s.connect(f); f.connect(g); g.connect(master);
+      s.start(t); s.stop(t + 2.3);
+    },
     shield() { if (allowed('shield', 0.08)) tone('sine', 1800, 900, 0.09, 0.03); }
   };
 
@@ -89,7 +105,8 @@ window.CC = window.CC || {};
     harvester_select: 3, harvester_move: 3, harvester_harvest: 3, harvester_built: 1,
     announce_under_attack: 1, announce_base_attack: 1, announce_wave: 1, announce_no_resources: 1,
     announce_mined_out: 1, announce_ship_lost: 1, announce_upgrade: 1, announce_hive_destroyed: 1,
-    announce_victory: 1, announce_defeat: 1, announce_start: 1
+    announce_victory: 1, announce_defeat: 1, announce_start: 1, announce_comet: 2,
+    announce_sector: 2, announce_enter: 2, announce_saved: 1, commander_move: 3, commander_select: 2
   };
   const cache = {};
   let speaking = null;
@@ -115,11 +132,53 @@ window.CC = window.CC || {};
     if (p && p.catch) p.catch(() => {});
   }
 
+  // ---------- Music: the main theme on the menu, two tracks in game, crossfaded ----------
+  const TRACKS = { theme: 'audio/music/main-theme.mp3', calm: 'audio/music/track-1.mp3', battle: 'audio/music/track-2.mp3' };
+  const MUSIC_VOL = 0.45;
+  const players = {};
+  let wanted = null;          // the track that should be playing
+  let unlocked = false;       // browsers only allow sound after a click or key
+  function player(name) {
+    if (!players[name]) {
+      const a = new Audio(TRACKS[name]);
+      a.loop = true; a.preload = 'auto'; a.volume = 0;
+      players[name] = a;
+    }
+    return players[name];
+  }
+  function music(name) {
+    wanted = name;
+    if (!unlocked || muted) return;
+    const a = player(name);
+    if (a.paused) { const p = a.play(); if (p && p.catch) p.catch(() => {}); }
+  }
+  // fade every track towards its target volume
+  setInterval(() => {
+    for (const name in players) {
+      const a = players[name];
+      const target = !muted && name === wanted ? MUSIC_VOL : 0;
+      const v = a.volume + Math.sign(target - a.volume) * 0.025;
+      a.volume = Math.max(0, Math.min(1, Math.abs(target - a.volume) < 0.03 ? target : v));
+      if (a.volume === 0 && name !== wanted && !a.paused) a.pause();
+    }
+  }, 60);
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    init();
+    if (wanted) music(wanted);
+  }
+  window.addEventListener('pointerdown', unlock, { capture: true });
+  window.addEventListener('keydown', unlock, { capture: true });
+
   function setMuted(m) {
     muted = m;
     if (master) master.gain.value = m ? 0 : 0.5;
     if (m && speaking) speaking.pause();
+    if (!m && wanted) music(wanted);
+    try { localStorage.setItem('cc-muted', m ? '1' : '0'); } catch (e) { /* private mode */ }
   }
+  try { muted = localStorage.getItem('cc-muted') === '1'; } catch (e) { /* private mode */ }
 
-  CC.audio = { init: init, sfx: sfx, say: say, setMuted: setMuted, get muted() { return muted; } };
+  CC.audio = { music: music, get musicTrack() { return wanted; }, init: init, sfx: sfx, say: say, setMuted: setMuted, get muted() { return muted; } };
 })(window.CC);

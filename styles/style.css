@@ -1,0 +1,212 @@
+@import url("colour-scheme.css");
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--navy);
+  color: var(--white);
+}
+
+#game-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+#game-container canvas {
+  display: block;
+  touch-action: none;
+}
+
+#hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  max-width: calc(100% - 20px);
+  padding: 8px 12px;
+  background-color: var(--navy);
+  border: 2px solid var(--blue-dark);
+  font-size: 15px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+#resources {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--blue-light);
+}
+
+#wave { color: var(--pink); }
+
+#queue:empty { display: none; }
+
+#hud .bar {
+  display: none;
+  width: 200px;
+  max-width: 100%;
+  height: 6px;
+  margin-top: 4px;
+  background-color: var(--blue-dark);
+}
+
+#queue-bar {
+  width: 0;
+  height: 100%;
+  background-color: var(--pink);
+}
+
+#hives { color: #8cff2e; }
+
+#radar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  width: 170px;
+  height: 170px;
+  border: 2px solid var(--blue-dark);
+  cursor: pointer;
+}
+
+#message {
+  display: none;
+  position: absolute;
+  top: 192px;
+  right: 10px;
+  z-index: 10;
+  max-width: 320px;
+  padding: 8px 12px;
+  background-color: var(--blue-dark);
+  border: 2px solid var(--blue-light);
+  pointer-events: none;
+}
+
+#controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  z-index: 10;
+  padding: 0 8px;
+}
+
+#controls .row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.button {
+  background-color: var(--blue-dark);
+  border: 2px solid var(--blue-light);
+  color: var(--white);
+  padding: 10px 16px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.button:hover { background-color: var(--blue); }
+
+.button:disabled {
+  background-color: var(--navy);
+  border-color: var(--blue-dark);
+  color: #7f99aa;
+  cursor: not-allowed;
+}
+
+.button.upgrade { border-color: var(--pink); }
+
+.button .lvl { color: var(--blue-light); }
+
+.button.secondary {
+  background-color: var(--navy);
+  border-color: var(--blue);
+}
+
+.button.secondary:hover { background-color: var(--blue-dark); }
+
+.cost { color: var(--pink); }
+
+#select-box {
+  display: none;
+  position: absolute;
+  z-index: 9;
+  border: 1px solid var(--pink);
+  pointer-events: none;
+}
+
+#loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+#overlay .panel {
+  max-width: 560px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  padding: 20px 24px;
+  background-color: var(--navy);
+  border: 2px solid var(--blue-light);
+}
+
+#overlay h1 {
+  margin: 0 0 8px;
+  color: var(--blue-light);
+}
+
+#overlay h2 {
+  margin: 16px 0 6px;
+  font-size: 17px;
+  color: var(--pink);
+}
+
+#overlay ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+
+#overlay a { color: var(--blue-light); }
+
+#start { margin: 4px 0 8px; font-size: 18px; padding: 10px 28px; }
+
+/* the Ko-fi button stays off the battlefield while playing */
+body.playing .floatingchat-container-wrap,
+body.playing .floatingchat-container-wrap-mobi,
+body.playing .floating-chat-kofi-popup-iframe,
+body.playing .floating-chat-kofi-popup-iframe-mobi { display: none !important; }
+
+.error-container {
+  text-align: center;
+  padding: 60px 16px;
+}
+
+@media (max-width: 700px) {
+  #hud { font-size: 12px; padding: 5px 7px; max-width: calc(100% - 130px); line-height: 1.35; }
+  #resources { font-size: 15px; }
+  #radar { width: 104px; height: 104px; }
+  #message { top: 130px; left: 10px; right: 10px; max-width: none; font-size: 13px; }
+  .button { padding: 7px 8px; font-size: 12px; }
+  #controls .row { gap: 4px; margin-top: 4px; }
+}

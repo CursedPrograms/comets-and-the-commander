@@ -24,9 +24,39 @@
   </div>
 <br>
 
-# comet-and-commander
+# Comet & Commander
 
-A 3d space RTS in HTML.
+A 3D space RTS that runs in the browser. Your Commander carrier sits at the centre of a sphere of space and the battle happens all around it: mine comets and asteroids, build a fleet, research upgrades and destroy the three enemy hives before their waves destroy you.
+
+**Play it:** [cursedprograms.github.io/comet-and-commander](https://cursedprograms.github.io/comet-and-commander/)
+
+## Gameplay
+
+- **Economy:** harvesters mine comets and asteroids on their own and carry the ore back to the Commander. Spend ore on ships and upgrades, built one at a time in the Commander's queue.
+- **Ships:** fighters (fast interceptors that dogfight), cruisers (heavy capital ships with turrets) and harvesters (industrial miners with a drill).
+- **Upgrades:** weapons, armour and mining, three levels each.
+- **Enemy:** three hives at the edge of the sphere guard themselves and send growing waves of raiders and destroyers.
+- **Commander:** repairs ships near it, defends itself with turrets and can set a rally point for new ships.
+- Explosions, sound effects and voice responses when you select or order ships.
+
+## Controls
+
+| | Mouse | Touch |
+| --- | --- | --- |
+| Select | Click a ship, drag a box, Shift adds, double-click picks every ship of that type | Tap a ship |
+| Order | Right-click space to move, an enemy to attack, a comet to mine | Tap where to go |
+| View | Right-drag turns the view 360 degrees round you, wheel zooms | Drag, pinch |
+
+Keys: F/C/H build, X army, Z harvesters, B base, Ctrl+1-9 make a group and 1-9 pick it, WASD or arrows turn the view, Q/E zoom, P pause, M sound.
+
+## Files
+
+- `index.html` - the page
+- `styles/style.css` - layout and colours
+- `scripts/game.js` - game logic, input, HUD and radar
+- `scripts/models.js` - ship models, backdrop and effects (three.js r128)
+- `scripts/audio.js` - synthesised sound effects and voice playback
+- `audio/voice/` - voice lines, generated with [Piper](https://github.com/rhasspy/piper) TTS (Amy and Ryan voices)
 
 <br>
 <div align="center">

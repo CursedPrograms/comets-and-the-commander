@@ -1,306 +1,87 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 
 <head>
-  <base href="">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Comet & Commander</title>
-  <link rel=stylesheet href="index.css" />
+  <title>Comet &amp; Commander</title>
+  <meta name="description" content="Comet & Commander: a 3D space RTS in the browser. Mine comets, build a fleet and destroy the enemy hives around you.">
+  <link href="https://cursedprograms.github.io/cursedentertainment/cursedFavicon.png" rel="icon" type="image/x-icon">
+  <link rel="stylesheet" href="styles/style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
 </head>
 
 <body>
   <div id="game-container">
-    <div id="loading">Loading game assets...</div>
+    <div id="loading">Loading...</div>
     <div id="hud">
-      <div id="resources">Resources: 1000</div>
-      <div id="selected-info">No unit selected</div>
+      <div id="resources">Ore: 400</div>
+      <div id="hives"></div>
+      <div id="wave"></div>
+      <div id="base-hp"></div>
+      <div id="unit-count"></div>
+      <div id="selected-info">Nothing selected</div>
+      <div id="queue"></div>
+      <div class="bar"><div id="queue-bar"></div></div>
     </div>
+    <canvas id="radar" width="170" height="170" title="Radar: click to turn towards a spot"></canvas>
+    <div id="message"></div>
+    <div id="select-box"></div>
     <div id="controls">
-      <button class="button" id="build-fighter">Build Fighter</button>
-      <button class="button" id="build-cruiser">Build Cruiser</button>
-      <button class="button" id="build-harvester">Build Harvester</button>
+      <div class="row">
+        <button class="button" id="build-fighter" title="Build a fighter (F)">Fighter <span class="cost">100</span></button>
+        <button class="button" id="build-cruiser" title="Build a cruiser (C)">Cruiser <span class="cost">300</span></button>
+        <button class="button" id="build-harvester" title="Build a harvester (H)">Harvester <span class="cost">150</span></button>
+        <button class="button upgrade" id="up-weapons" title="Weapons upgrade: +25% damage">Weapons <span class="lvl">0</span> <span class="cost">200</span></button>
+        <button class="button upgrade" id="up-armour" title="Armour upgrade: -15% damage taken">Armour <span class="lvl">0</span> <span class="cost">200</span></button>
+        <button class="button upgrade" id="up-mining" title="Mining upgrade: faster mining, bigger cargo">Mining <span class="lvl">0</span> <span class="cost">150</span></button>
+      </div>
+      <div class="row">
+        <button class="button secondary" id="select-army" title="Select all warships (X)">Army</button>
+        <button class="button secondary" id="select-harvesters" title="Select all harvesters (Z)">Harvesters</button>
+        <button class="button secondary" id="select-base" title="Select the Commander (B)">Base</button>
+        <button class="button secondary" id="select-none" title="Deselect (Esc)">Deselect</button>
+        <button class="button secondary" id="home" title="Reset the view (Home)">View</button>
+        <button class="button secondary" id="sound" title="Sound (M)">Sound on</button>
+        <button class="button secondary" id="pause" title="Pause (P)">Pause</button>
+      </div>
+    </div>
+    <div id="overlay">
+      <div class="panel">
+        <h1 id="overlay-title">Comet &amp; Commander</h1>
+        <p id="overlay-text">Your Commander carrier sits at the centre of a sphere of space. Mine the comets and asteroids around you, build a fleet and destroy the three enemy hives before their waves destroy you.</p>
+        <button class="button" id="start">Start</button>
+        <div id="help">
+          <h2>Economy</h2>
+          <ul>
+            <li>Harvesters mine comets and asteroids on their own and carry the ore back to the Commander.</li>
+            <li>Spend ore on ships and upgrades. They are built one at a time in the Commander's queue.</li>
+            <li>The Commander repairs ships near it and defends itself with its turrets.</li>
+          </ul>
+          <h2>Mouse</h2>
+          <ul>
+            <li>Click a ship to select it, drag a box to select several, Shift to add, double-click for every ship of that type.</li>
+            <li>Right-click to order: space to move, an enemy to attack, a comet to mine. With the Commander selected, right-click sets a rally point.</li>
+            <li>Right-drag turns the view all the way round you, the wheel zooms. Ctrl+1-9 makes a group, 1-9 picks it.</li>
+          </ul>
+          <h2>Touch</h2>
+          <ul>
+            <li>Tap a ship to select it, then tap where it should go. Drag to look around, pinch to zoom.</li>
+          </ul>
+          <h2>Keys</h2>
+          <ul>
+            <li>F, C, H build. X army, Z harvesters, B base. WASD or arrows turn the view, Q/E zoom. P pause, M sound.</li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script>
-    // Initialize Three.js scene
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.getElementById('game-container').appendChild(renderer.domElement);
-
-    // Add ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040);
-    scene.add(ambientLight);
-
-    // Add directional light (sun)
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1);
-    sunLight.position.set(5, 3, 5);
-    scene.add(sunLight);
-
-    // Create starfield
-    const starGeometry = new THREE.BufferGeometry();
-    const starMaterial = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.1 });
-    const starVertices = [];
-    for (let i = 0; i < 10000; i++) {
-      const x = (Math.random() - 0.5) * 2000;
-      const y = (Math.random() - 0.5) * 2000;
-      const z = (Math.random() - 0.5) * 2000;
-      starVertices.push(x, y, z);
-    }
-    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-    const stars = new THREE.Points(starGeometry, starMaterial);
-    scene.add(stars);
-
-    // Game state
-    let resources = 1000;
-    const ships = [];
-    const enemies = [];
-    const resourceNodes = [];
-    let selectedUnit = null;
-
-    // Ship class
-    class Ship {
-      constructor(type, cost, health, damage, color) {
-        this.type = type;
-        this.cost = cost;
-        this.health = health;
-        this.damage = damage;
-        this.selected = false;
-        this.target = null;
-
-        // Create ship mesh
-        let geometry;
-        switch (type) {
-          case 'fighter':
-            geometry = new THREE.ConeGeometry(0.5, 2, 8);
-            break;
-          case 'cruiser':
-            geometry = new THREE.BoxGeometry(1.5, 0.5, 3);
-            break;
-          case 'harvester':
-            geometry = new THREE.SphereGeometry(0.75, 16, 16);
-            break;
-        }
-        const material = new THREE.MeshPhongMaterial({ color: color });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.position.set(Math.random() * 10 - 5, Math.random() * 10 - 5, Math.random() * 10 - 5);
-        scene.add(this.mesh);
-        ships.push(this);
-      }
-
-      move() {
-        if (this.target) {
-          const direction = new THREE.Vector3().subVectors(this.target, this.mesh.position);
-          if (direction.length() > 0.1) {
-            direction.normalize();
-            this.mesh.position.add(direction.multiplyScalar(0.1));
-            this.mesh.lookAt(this.target);
-          }
-        }
-      }
-
-      select() {
-        this.selected = true;
-        const geometry = new THREE.RingGeometry(1, 1.2, 32);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
-        this.selectionRing = new THREE.Mesh(geometry, material);
-        this.selectionRing.rotation.x = Math.PI / 2;
-        this.mesh.add(this.selectionRing);
-      }
-
-      deselect() {
-        this.selected = false;
-        if (this.selectionRing) {
-          this.mesh.remove(this.selectionRing);
-          this.selectionRing.geometry.dispose();
-          this.selectionRing.material.dispose();
-          this.selectionRing = null;
-        }
-      }
-    }
-
-    // Enemy class
-    class Enemy {
-      constructor() {
-        const geometry = new THREE.TetrahedronGeometry(0.8);
-        const material = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.position.set(Math.random() * 50 - 25, Math.random() * 50 - 25, Math.random() * 50 - 25);
-        scene.add(this.mesh);
-        enemies.push(this);
-      }
-
-      move() {
-        this.mesh.position.x += (Math.random() - 0.5) * 0.1;
-        this.mesh.position.y += (Math.random() - 0.5) * 0.1;
-        this.mesh.position.z += (Math.random() - 0.5) * 0.1;
-      }
-    }
-
-    // Resource Node class
-    class ResourceNode {
-      constructor() {
-        const geometry = new THREE.OctahedronGeometry(1, 0);
-        const material = new THREE.MeshStandardMaterial({
-          color: 0xffA500,
-          metalness: 1,
-          roughness: 0.2,
-          emissive: 0xffA500,
-          emissiveIntensity: 0.5
-        });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.position.set(Math.random() * 50 - 25, Math.random() * 50 - 25, Math.random() * 50 - 25);
-        scene.add(this.mesh);
-        resourceNodes.push(this);
-      }
-    }
-
-    // Build ships
-    document.getElementById('build-fighter').addEventListener('click', () => {
-      if (resources >= 100) {
-        resources -= 100;
-        new Ship('fighter', 100, 50, 10, 0x0000ff);
-        updateHUD();
-      }
-    });
-
-    document.getElementById('build-cruiser').addEventListener('click', () => {
-      if (resources >= 300) {
-        resources -= 300;
-        new Ship('cruiser', 300, 200, 30, 0x00ff00);
-        updateHUD();
-      }
-    });
-
-    document.getElementById('build-harvester').addEventListener('click', () => {
-      if (resources >= 150) {
-        resources -= 150;
-        new Ship('harvester', 150, 75, 5, 0xffff00);
-        updateHUD();
-      }
-    });
-
-    // Update HUD
-    function updateHUD() {
-      document.getElementById('resources').textContent = `Resources: ${resources}`;
-      if (selectedUnit) {
-        document.getElementById('selected-info').textContent = `Selected: ${selectedUnit.type} (Health: ${selectedUnit.health})`;
-      } else {
-        document.getElementById('selected-info').textContent = 'No unit selected';
-      }
-    }
-
-    // Raycaster for selection
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    // Handle click events for selection
-    window.addEventListener('click', (event) => {
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, camera);
-
-      const intersects = raycaster.intersectObjects(scene.children, true);
-
-      if (intersects.length > 0) {
-        const clickedObject = intersects[0].object;
-        const clickedShip = ships.find(ship => ship.mesh === clickedObject);
-
-        if (clickedShip) {
-          if (selectedUnit) {
-            selectedUnit.deselect();
-          }
-          selectedUnit = clickedShip;
-          selectedUnit.select();
-          updateHUD();
-        } else {
-          // If clicked elsewhere, set it as the target for the selected unit
-          if (selectedUnit) {
-            selectedUnit.target = intersects[0].point;
-          }
-        }
-      }
-    });
-
-    // Handle window resize
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    // Create initial enemies and resource nodes
-    for (let i = 0; i < 5; i++) {
-      new Enemy();
-      new ResourceNode();
-    }
-
-    // Track if the middle mouse button is pressed
-    let isMiddleMousePressed = false;
-
-    // Event listeners for mouse button press and release
-    window.addEventListener('mousedown', (event) => {
-      if (event.button === 1) { // Middle mouse button
-        isMiddleMousePressed = true;
-      }
-    });
-
-    window.addEventListener('mouseup', (event) => {
-      if (event.button === 1) {
-        isMiddleMousePressed = false;
-      }
-    });
-
-    // Animation loop
-    function animate() {
-      requestAnimationFrame(animate);
-
-      // Move ships
-      ships.forEach(ship => ship.move());
-
-      // Move enemies
-      enemies.forEach(enemy => enemy.move());
-
-      // Rotate resource nodes
-      resourceNodes.forEach(node => {
-        node.mesh.rotation.x += 0.01;
-        node.mesh.rotation.y += 0.01;
-      });
-
-      // Rotate camera only if middle mouse button is pressed
-      if (isMiddleMousePressed) {
-        const rotationSpeed = 0.0001; // Adjust speed as needed
-        camera.position.x = Math.sin(Date.now() * rotationSpeed) * 30;
-        camera.position.z = Math.cos(Date.now() * rotationSpeed) * 30;
-        camera.position.y = Math.sin(Date.now() * rotationSpeed * 0.05) * 10;
-      }
-
-      camera.lookAt(scene.position);
-      renderer.render(scene, camera);
-    }
-
-    // Start the game
-    animate();
-    updateHUD();
-
-    // Remove loading message
-    document.getElementById('loading').style.display = 'none';
-
-  </script>
-      <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-<script>
-  kofiWidgetOverlay.draw('cursedentertainment', {
-    'type': 'floating-chat',
-    'floating-chat.donateButton.text': 'Support me',
-    'floating-chat.donateButton.background-color': '#323842',
-    'floating-chat.donateButton.text-color': '#fff'
-  });
-</script>
+  <script src="scripts/audio.js"></script>
+  <script src="scripts/models.js"></script>
+  <script src="scripts/game.js"></script>
+  <script src="https://storage.ko-fi.com/cdn/scripts/overlay-widget.js"></script>
+  <script src="scripts/kofi.js"></script>
 </body>
 
 </html>

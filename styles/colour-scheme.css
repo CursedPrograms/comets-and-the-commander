@@ -1,8 +1,8 @@
 :root {
-    --color1: #eb8071;
-    --color2: #dd546e;
-    --color3: #92406e; 
-    --color4: #202146; 
-    --color5: #170c32; 
-  }
-  
+  --navy: #001725;
+  --blue-dark: #005184;
+  --blue: #007ab7;
+  --blue-light: #34A9E3;
+  --pink: #f088e9;
+  --white: #ffffff;
+}

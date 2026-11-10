@@ -20,9 +20,9 @@
     cruiser:   { name: 'Cruiser',   cost: { s: 160, f: 50 }, build: 9, hp: 400, dmg: 22, range: 24, rate: 0.9,  speed: 7,  accel: 1.2, turn: 1.4, aggro: 32, bolt: 50, heavy: true },
     harvester: { name: 'Steel harvester', res: 's', cost: { s: 60, f: 10 },  build: 4, hp: 120, dmg: 0,  range: 0,  rate: 0,    speed: 10, accel: 2,   turn: 3,   aggro: 0, cargo: 50, mine: 10 },
     // the very special one (needs a Tech Centre): a lance whose hits splash round the target
-    dreadnought: { name: 'Dreadnought', cost: { s: 900, f: 400 }, build: 30, hp: 3200, dmg: 46, range: 36, rate: 1.1, speed: 5, accel: 0.8, turn: 0.8, aggro: 40, bolt: 55, heavy: true, tech: true, max: 3 },
+    dreadnought: { name: 'Dreadnought', cost: { s: 900, f: 400, a: 150 }, build: 30, hp: 3200, dmg: 46, range: 36, rate: 1.1, speed: 5, accel: 0.8, turn: 0.8, aggro: 40, bolt: 55, heavy: true, tech: true, max: 3 },
     // takes over a nest (needs a Tech Centre): fly it to a nest, it locks on and the nest becomes yours
-    captor:    { name: 'Usurper',   cost: { s: 350, f: 150 }, build: 14, hp: 500, dmg: 0, range: 0, rate: 0, speed: 9, accel: 1.6, turn: 2, aggro: 0, tech: true },
+    captor:    { name: 'Usurper',   cost: { s: 350, f: 150, a: 60 }, build: 14, hp: 500, dmg: 0, range: 0, rate: 0, speed: 9, accel: 1.6, turn: 2, aggro: 0, tech: true },
     // built by a captured nest for you, in its faction's shape
     turncoat:  { name: 'Turncoat',  cost: {}, build: 0, hp: 110, dmg: 8, range: 16, rate: 0.45, speed: 14, accel: 2.6, turn: 4, aggro: 34, bolt: 60, heavy: false }
   };
@@ -31,7 +31,8 @@
   // a harvester for each resource: meteorites (steel), comets (water), green meteorites (fuel)
   UNIT.hwater = Object.assign({}, UNIT.harvester, { name: 'Water harvester', res: 'w', model: 'harvester' });
   UNIT.hfuel = Object.assign({}, UNIT.harvester, { name: 'Fuel harvester', res: 'f', model: 'harvester' });
-  const RES_COLOUR = { s: 0xd9e2ea, w: 0x34a9e3, f: 0x39ff6a };
+  UNIT.halu = Object.assign({}, UNIT.harvester, { name: 'Aluminium harvester', res: 'a', model: 'harvester', cost: { s: 120, f: 40 } });
+  const RES_COLOUR = { s: 0xbfb2a6, w: 0x34a9e3, f: 0x39ff6a, a: 0xeaf7ff };
   function isH(t) { return !!(UNIT[t] && UNIT[t].res); }
   function voiceOf(t) { return isH(t) ? 'harvester' : (t === 'fighter' || t === 'cruiser' ? t : 'cruiser'); }
   UNIT.pathfinder = { name: 'Pathfinder', cost: { s: 250, f: 120 }, build: 12, hp: 600, dmg: 9, range: 22, rate: 0.3, speed: 20, accel: 3, turn: 3, aggro: 30, bolt: 80, heavy: false, max: 1 };
@@ -60,10 +61,12 @@
   const BUILDINGS = {
     solar:    { name: 'Solar plant',  cost: { s: 120, w: 40 }, build: 8,  hp: 900,  power: 100, model: 'solar' },
     refinery: { name: 'Refinery',     cost: { s: 250, w: 80 }, build: 12, hp: 1400, power: -40, model: 'refinery' },
-    tech:     { name: 'Tech Centre',  cost: { s: 300, w: 200 }, build: 18, hp: 1200, power: -60, model: 'tech' },
+    tech:     { name: 'Tech Centre',  cost: { s: 300, w: 200, a: 100 }, build: 18, hp: 1200, power: -60, model: 'tech' },
     turret:   { name: 'Defence turret', cost: { s: 160, w: 40 }, build: 8, hp: 800, power: -20, model: 'turretPlatform' },
     shipyard: { name: 'Shipyard',     cost: { s: 320, w: 120 }, build: 15, hp: 1500, power: -50, model: 'shipyard' },
-    repair:   { name: 'Repair dock',  cost: { s: 180, w: 80 }, build: 10, hp: 1000, power: -30, model: 'repairDock' }
+    repair:   { name: 'Repair dock',  cost: { s: 180, w: 80 }, build: 10, hp: 1000, power: -30, model: 'repairDock' },
+    // the special refinery: aluminium can only be unloaded and processed here
+    smelter:  { name: 'Smelter',      cost: { s: 300, w: 150 }, build: 14, hp: 1300, power: -50, model: 'refinery' }
   };
   const OUTPOST_R = 55;            // a captured nest's own sphere
   const NESTS_PER_SECTOR = [1, 1, 1, 2, 2, 2, 2, 3, 3, 3];
@@ -553,10 +556,17 @@
         if (this.cargo >= cap - 0.001) this.hstate = 'return';
       } else if (this.hstate === 'return') {
         // home to the nearest of the Commander and your refineries (a refinery adds a quarter, when it has power)
-        let dock = commander, best = d2(this.pos, commander.pos);
-        for (const b of buildings) if (!b.dead && b.kind === 'refinery' && d2(this.pos, b.pos) < best) { best = d2(this.pos, b.pos); dock = b; }
+        let dock = t.res === 'a' ? null : commander, best = dock ? d2(this.pos, commander.pos) : Infinity;
+        const accepts = t.res === 'a' ? 'smelter' : 'refinery';
+        for (const b of buildings) if (!b.dead && b.kind === accepts && d2(this.pos, b.pos) < best) { best = d2(this.pos, b.pos); dock = b; }
+        if (!dock) {
+          // aluminium needs a smelter: it waits by the Commander, full, until there is one
+          if (state.time - (state.smelterWarned || -99) > 40) { state.smelterWarned = state.time; flash('Aluminium needs a Smelter to unload (Base tab)'); }
+          if (d2(this.pos, commander.pos) > 30 * 30) this.steer(commander.pos.clone().add(this.escort), t.speed, dt, 3); else this.steer(this.pos, 0, dt, 99);
+          return;
+        }
         if (this.steer(dock.pos, t.speed, dt, dock.radius + 3)) {
-          const bonus = dock === commander ? 1 : 1 + 0.25 * power().ratio;
+          const bonus = dock === commander || dock.kind === 'smelter' ? 1 : 1 + 0.25 * power().ratio;
           addRes(this.cargoKind || 's', Math.round(this.cargo * bonus));
           this.cargo = 0; this.cargoKind = null;
           this.hstate = 'seek';
@@ -934,6 +944,7 @@
       this.mesh.rotation.set(Math.random() * 0.4, Math.random() * Math.PI * 2, Math.random() * 0.4);
       this.offset = pos.clone().sub(commander.pos);
       this.zapTimer = Math.random();
+      if (kind === 'smelter') { this.mesh.add(models.glowSprite(0xeaf7ff, 16, 0.55)); this.mesh.scale.setScalar(0.9); }
       buildings.push(this);
     }
     die(from) {
@@ -1202,11 +1213,11 @@
   class Rock {
     constructor(kind, centre, pos, amount) {
       this.kind = kind;
-      this.model = kind === 'comet' ? models.comet() : models.asteroid(kind === 'fuel');
+      this.model = kind === 'comet' ? models.comet() : models.asteroid(kind);
       this.mesh = this.model.group;
       this.mesh.userData.entity = this;
       this.radius = this.model.size;
-      this.max = kind === 'comet' ? Math.round(rand(900, 1300)) : (kind === 'fuel' ? Math.round(rand(250, 380)) : Math.round(rand(350, 500)));
+      this.max = kind === 'comet' ? Math.round(rand(900, 1300)) : kind === 'fuel' ? Math.round(rand(250, 380)) : kind === 'alu' ? Math.round(rand(160, 240)) : Math.round(rand(350, 500));
       this.amount = amount === undefined ? this.max : amount;
       this.spin = randDir().multiplyScalar(rand(0.1, 0.4));
       this.centre = centre.clone();
@@ -1362,9 +1373,9 @@
       if (!s.conquered && s.hives.length && s.hives.every((h) => h.dead) && !rivals.some((r) => r.sector === s && !r.dead)) {
         s.conquered = true;
         const bonus = 400 + 100 * s.level;
-        addRes('s', bonus); addRes('w', Math.round(bonus / 2)); addRes('f', Math.round(bonus / 4));
+        addRes('s', bonus); addRes('w', Math.round(bonus / 2)); addRes('f', Math.round(bonus / 4)); addRes('a', 20 + 10 * s.level);
         say('announce_sector', 0, true);
-        flash('Sector ' + (s.level + 1) + ' conquered! +' + bonus + ' steel, ' + Math.round(bonus / 2) + ' water, ' + Math.round(bonus / 4) + ' fuel. ' + (SECTORS - conqueredCount()) + ' to go: open Sectors (N) and pick the next one.');
+        flash('Sector ' + (s.level + 1) + ' conquered! +' + bonus + ' steel, ' + Math.round(bonus / 2) + ' water, ' + Math.round(bonus / 4) + ' fuel, ' + (20 + 10 * s.level) + ' aluminium. ' + (SECTORS - conqueredCount()) + ' to go: open Sectors (N) and pick the next one.');
         drawMap();
         saveGame(true);
       }
@@ -1374,19 +1385,20 @@
 
   // ---------- Economy, production, upgrades ----------
   // three resources: steel (meteorites), water (comets), fuel (green meteorites). Kills and conquests pay steel.
-  const RES = { s: 'steel', w: 'water', f: 'fuel' };
-  const RES_OF_ROCK = { asteroid: 's', comet: 'w', fuel: 'f' };
+  const RES = { s: 'steel', w: 'water', f: 'fuel', a: 'aluminium' };
+  const RES_OF_ROCK = { asteroid: 's', comet: 'w', fuel: 'f', alu: 'a' };
   function addRes(k, n) { state[RES[k]] += n; state.mined += Math.max(0, n); }
   function addResources(n) { addRes('s', n); }
-  function canPay(c) { return (state.steel >= (c.s || 0)) && (state.water >= (c.w || 0)) && (state.fuel >= (c.f || 0)); }
+  function canPay(c) { return (state.steel >= (c.s || 0)) && (state.water >= (c.w || 0)) && (state.fuel >= (c.f || 0)) && (state.aluminium >= (c.a || 0)); }
   function costText(c) {
     const out = [];
-    if (c.s) out.push(c.s + ' steel'); if (c.w) out.push(c.w + ' water'); if (c.f) out.push(c.f + ' fuel');
+    if (c.s) out.push(c.s + ' steel'); if (c.w) out.push(c.w + ' water'); if (c.f) out.push(c.f + ' fuel'); if (c.a) out.push(c.a + ' aluminium');
     return out.join(', ') || 'free';
   }
   function costHtml(c) {
     const out = [];
     if (c.s) out.push('<span class="r-s">' + c.s + '</span>'); if (c.w) out.push('<span class="r-w">' + c.w + '</span>'); if (c.f) out.push('<span class="r-f">' + c.f + '</span>');
+    if (c.a) out.push('<span class="r-a">' + c.a + '</span>');
     return out.join(' ');
   }
 
@@ -1410,7 +1422,7 @@
     flash('The ' + (which === 'u' ? 'upgrade' : (which ? 'building' : 'ship')) + ' queue is full (' + CAP.queue + ')'); sfx.denied(); return true;
   }
   function pay(c, what) {
-    if (canPay(c)) { state.steel -= c.s || 0; state.water -= c.w || 0; state.fuel -= c.f || 0; return true; }
+    if (canPay(c)) { state.steel -= c.s || 0; state.water -= c.w || 0; state.fuel -= c.f || 0; state.aluminium -= c.a || 0; return true; }
     flash('Not enough for ' + what + ': it costs ' + costText(c)); sfx.denied(); say('announce_no_resources', 4);
     return false;
   }
@@ -1459,7 +1471,7 @@
     if (q[index].kind === 'upgrade') gone = q.filter((x, i) => i >= index && x.type === q[index].type);
     for (const item of gone) {
       const c = item.cost || (item.kind === 'unit' ? unitCost(item.type) : item.kind === 'building' ? BUILDINGS[item.type].cost : {});
-      state.steel += c.s || 0; state.water += c.w || 0; state.fuel += c.f || 0;
+      state.steel += c.s || 0; state.water += c.w || 0; state.fuel += c.f || 0; state.aluminium += c.a || 0;
       const i = q.indexOf(item);
       if (i === 0) commander[QUEUES[qName]] = 0;
       q.splice(i, 1);
@@ -1568,13 +1580,13 @@
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   function setRay(x, y) {
-    ndc.x = (x / window.innerWidth) * 2 - 1;
-    ndc.y = -(y / window.innerHeight) * 2 + 1;
+    ndc.x = (x / viewW) * 2 - 1;
+    ndc.y = -(y / viewH) * 2 + 1;
     raycaster.setFromCamera(ndc, camera);
   }
   function toScreen(p) {
     const v = p.clone().project(camera);
-    return { x: (v.x + 1) / 2 * window.innerWidth, y: (1 - v.y) / 2 * window.innerHeight, behind: v.z > 1 || v.z < -1 };
+    return { x: (v.x + 1) / 2 * viewW, y: (1 - v.y) / 2 * viewH, behind: v.z > 1 || v.z < -1 };
   }
   function pickables() {
     const list = units.concat(enemies, hives, buildings, outposts, rivals, enemyBuildings, rocks.filter((r) => !r.dead && d2(r.pos, camera.position) < 400 * 400));
@@ -1839,6 +1851,7 @@
   $('build-harvester').addEventListener('click', () => queueUnit('harvester'));
   $('build-hwater').addEventListener('click', () => queueUnit('hwater'));
   $('build-hfuel').addEventListener('click', () => queueUnit('hfuel'));
+  $('build-halu').addEventListener('click', () => queueUnit('halu'));
   $('build-dreadnought').addEventListener('click', () => queueUnit('dreadnought'));
   $('build-captor').addEventListener('click', () => queueUnit('captor'));
   for (const k of Object.keys(BUILDINGS)) $('bld-' + k).addEventListener('click', () => queueBuilding(k));
@@ -1993,7 +2006,7 @@
   // ---------- HUD ----------
   function updateHUD() {
     ui.resources.innerHTML = '<span class="r-s">Steel ' + Math.floor(state.steel) + '</span> <span class="r-w">Water ' + Math.floor(state.water) +
-      '</span> <span class="r-f">Fuel ' + Math.floor(state.fuel) + '</span>';
+      '</span> <span class="r-f">Fuel ' + Math.floor(state.fuel) + '</span> <span class="r-a">Alu ' + Math.floor(state.aluminium) + '</span>';
     const s = state.current;
     if (s) {
       ui.sector.textContent = 'Sector ' + (s.level + 1) + '/' + SECTORS + ': ' + s.faction.name + (s.conquered ? ' (conquered)' : ', ' + plural(s.hives.filter(alive).length, 'hive'));
@@ -2010,7 +2023,7 @@
     if (selection.length === 1) {
       const u = selection[0];
       let txt = u.name + ': hull ' + Math.max(0, Math.ceil(u.hp || 0)) + '/' + Math.round(u.maxHp || 0);
-      if (u instanceof Rock) txt = ({ comet: 'Comet', asteroid: 'Meteorite', fuel: 'Green meteorite' })[u.kind] + ': ' + Math.floor(u.amount) + ' ' + RES[RES_OF_ROCK[u.kind]] + ' left';
+      if (u instanceof Rock) txt = ({ comet: 'Comet', asteroid: 'Meteorite', fuel: 'Green meteorite', alu: 'Aluminium crystal' })[u.kind] + ': ' + Math.floor(u.amount) + ' ' + RES[RES_OF_ROCK[u.kind]] + ' left';
       if (isH(u.type)) txt += ', cargo ' + Math.floor(u.cargo) + (u.cargo > 0 && u.cargoKind ? ' ' + RES[u.cargoKind] : '') + ' (' + ({ seek: 'heading out', mine: 'mining', return: 'returning' })[u.hstate] + ')';
       if (u === commander) txt += '. Right-click to move the carrier.';
       if (u.type === 'pathfinder') txt += u === pilot ? (inSphere(u.pos) ? ', you are flying it' : ', OUTSIDE the sphere: burning fuel') + '. Space: black hole, T: hand back' : '. T flies it yourself';
@@ -2222,6 +2235,16 @@
         }
       }
     }
+    // aluminium: really rare; a couple of crystals far out in every other sector (one in the first)
+    for (const s of sectors) {
+      if (s.level > 0 && s.level % 2 === 0) continue;
+      const c = s.centre.clone().addScaledVector(randDir(), rand(95, 125));
+      if (c.length() > WORLD_R - 15) c.setLength(WORLD_R - 15);
+      for (let i = 0; i < (s.level === 0 ? 1 : 2); i++) {
+        new Rock('alu', s.centre, c.clone().addScaledVector(randDir(), rand(2, 5)), saved ? saved.rocks[rockIndex] : undefined);
+        rockIndex++;
+      }
+    }
     // nests (capture them) and Overlords: after everything else, so older saves still build the same world
     let nestIndex = 0;
     for (const s of sectors) {
@@ -2257,7 +2280,7 @@
   }
 
   function freshState(seed) {
-    return { seed: seed, steel: 800, water: 300, fuel: 250, mined: 0, kills: 0, running: false, started: false, over: false, time: 0, lastFight: -99,
+    return { seed: seed, steel: 800, water: 300, fuel: 250, aluminium: 0, mined: 0, kills: 0, running: false, started: false, over: false, time: 0, lastFight: -99,
       nextStrike: STRIKE.first[0] + Math.random() * (STRIKE.first[1] - STRIKE.first[0]), current: null,
       nextRaid: RAIDS.first, raids: 0,
       up: { weapons: 0, hulls: 0, mining: 0, logistics: 0, armour: 0, guns: 0, tractor: 0 } };
@@ -2292,7 +2315,7 @@
   function saveGame(announce) {
     if (!state || !state.started || state.over) return;
     const data = {
-      seed: state.seed, time: state.time, steel: state.steel, water: state.water, fuel: state.fuel, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
+      seed: state.seed, time: state.time, steel: state.steel, water: state.water, fuel: state.fuel, aluminium: state.aluminium, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
       nextRaid: state.nextRaid, raids: state.raids,
       sectors: sectors.map((s) => ({ visited: s.visited, conquered: s.conquered, wave: s.wave, nextWave: s.nextWave })),
       hives: [].concat.apply([], sectors.map((s) => s.hives.filter((h) => !h.nest).map((h) => (h.dead ? 0 : Math.round(h.hp))))),
@@ -2314,7 +2337,7 @@
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { data = null; }
     if (!data) { newGame(); return; }
     state = freshState(data.seed);
-    Object.assign(state, { time: data.time, steel: data.steel !== undefined ? data.steel : (data.resources || 0), water: data.water || 0, fuel: data.fuel || 0, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike,
+    Object.assign(state, { time: data.time, steel: data.steel !== undefined ? data.steel : (data.resources || 0), water: data.water || 0, fuel: data.fuel || 0, aluminium: data.aluminium || 0, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike,
       nextRaid: data.nextRaid === undefined ? RAIDS.first : data.nextRaid, raids: data.raids || 0 });
     state.up = Object.assign(freshState(0).up, data.up);
     buildWorld(data.seed, { hives: data.hives, rocks: data.rocks, commander: data.commander, nests: data.nests, rivals: data.rivals });
@@ -2450,12 +2473,36 @@
     renderer.render(scene, camera);
   }
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  // the battlefield ends where the panel begins (Age of Empires style): the 3D view is the space above it
+  let viewW = window.innerWidth, viewH = window.innerHeight;
+  function fitView() {
+    const panel = $('panel');
+    const ph = panel && document.body.classList.contains('playing') ? panel.offsetHeight : 0;
+    const w = window.innerWidth, h = Math.max(120, window.innerHeight - ph);
+    ui.message.style.bottom = (ph + 10) + 'px';    // messages sit just above the panel
+    if (w === viewW && h === viewH) return;
+    viewW = w; viewH = h;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+    renderer.setSize(w, h);
+  }
+  window.addEventListener('resize', fitView);
+  setInterval(fitView, 400);                       // the panel's height changes with its contents
   window.addEventListener('pagehide', () => saveGame());
+
+  // the Cursed splash: any key or click goes on to the menu (and starts the sound, which needs a gesture)
+  const splash = $('splash');
+  function leaveSplash() {
+    if (!splash || splash.classList.contains('gone')) return;
+    splash.classList.add('gone');
+    audio.init();
+    audio.music('theme');
+    setTimeout(() => { splash.style.display = 'none'; }, 600);
+  }
+  if (splash) {
+    splash.addEventListener('pointerdown', leaveSplash);
+    window.addEventListener('keydown', leaveSplash, { once: true });
+  }
 
   // Title screen: a world turning slowly behind the menu
   state = freshState(1);

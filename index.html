@@ -14,6 +14,13 @@
 <body>
   <div id="game-container">
     <div id="loading">Loading...</div>
+    <div id="splash">
+      <img class="cursed-logo" src="images/cursed-logo.png" alt="Cursed Entertainment">
+      <h1 class="title">Comets <span>and the</span> Commander</h1>
+      <p class="tag">A Cursed Entertainment game</p>
+      <p class="copyright">&copy; Cursed Entertainment 2026</p>
+      <p class="press">Press any key or click to start</p>
+    </div>
     <div id="message"></div>
     <div id="select-box"></div>
     <!-- everything at the bottom, Age of Empires style: status, commands, queues, the radar -->
@@ -39,6 +46,7 @@
           <button class="button" id="build-harvester" title="Steel harvester (H): mines meteorites">Steel harv. <span class="cost"></span></button>
           <button class="button" id="build-hwater" title="Water harvester: mines comets">Water harv. <span class="cost"></span></button>
           <button class="button" id="build-hfuel" title="Fuel harvester: mines green meteorites">Fuel harv. <span class="cost"></span></button>
+          <button class="button" id="build-halu" title="Aluminium harvester: mines the rare silver crystals; unloads only at a Smelter">Alu harv. <span class="cost"></span></button>
           <button class="button" id="build-pathfinder" title="Pathfinder (Y): a scout you fly yourself (T), outside the sphere too; it plants black holes">Pathfinder <span class="cost"></span></button>
           <button class="button" id="build-dreadnought" title="Dreadnought (G): your very special ship, a lance that splashes. Needs a Tech Centre, up to 3">Dreadnought <span class="cost"></span></button>
           <button class="button" id="build-captor" title="Usurper (U): right-click a nest to take it over. Needs a Tech Centre">Usurper <span class="cost"></span></button>
@@ -50,6 +58,7 @@
           <button class="button build" id="bld-turret" title="Defence turret: a static gun platform (-20 power)">Turret <span class="cost"></span></button>
           <button class="button build" id="bld-shipyard" title="Shipyard: ships build faster, up to two count (-50 power)">Shipyard <span class="cost"></span></button>
           <button class="button build" id="bld-repair" title="Repair dock: repairs ships and buildings near it (-30 power)">Repair dock <span class="cost"></span></button>
+          <button class="button build" id="bld-smelter" title="Smelter: the special refinery; aluminium can only be unloaded here (-50 power)">Smelter <span class="cost"></span></button>
         </div>
         <div class="tab-body" data-tab="research">
           <button class="button upgrade" id="up-weapons" title="Weapons research: +20% damage per level (Tech Centre)">Weapons <span class="lvl">0</span> <span class="cost"></span></button>
@@ -110,7 +119,7 @@
           <h2>How to play</h2>
           <ul>
             <li>Space is split into ten sectors, each held by a different enemy faction. Destroy every hive in a sector to conquer it, then conquer all ten.</li>
-            <li>Three resources, each with its own harvester: meteorites give steel, comets give water, the rarer green meteorites give fuel. Ships cost steel and fuel, buildings steel and water; fuel also powers black holes and the Pathfinder outside your spheres. Harvesters unload at the Commander or a refinery.</li>
+            <li>Three resources, each with its own harvester: meteorites give steel, comets give water, the rarer green meteorites give fuel. Ships cost steel and fuel, buildings steel and water. Aluminium (the rare silver crystals, far out) needs its own harvester and a Smelter; the Tech Centre, the Dreadnought and the Usurper need it; fuel also powers black holes and the Pathfinder outside your spheres. Harvesters unload at the Commander or a refinery.</li>
             <li>Spend ore on ships and on upgrades: weapons, hulls, mining and logistics (cheaper, faster ships). Everything is built in the Commander's queue.</li>
             <li>The Commander repairs ships near it. Idle warships escort it when it moves.</li>
             <li>Your ships only fight inside your sphere round the Commander. To attack a hive, fly the Commander to it.</li>

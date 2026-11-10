@@ -716,7 +716,24 @@ window.CC = window.CC || {};
   }
 
   // a meteorite: steel (grey rock, steel crystals) or, green, fuel
-  function asteroid(green) {
+  function asteroid(kind) {
+    const green = kind === 'fuel' || kind === true;
+    if (kind === 'alu') {
+      // aluminium: a cluster of bright silver-white crystals
+      const g = new THREE.Group();
+      const rock = new THREE.Group();
+      const m = mat(0xeef6ff, { metalness: 1, roughness: 0.12, emissive: 0x334455 });
+      for (let i = 0; i < 7; i++) {
+        const c = mesh(new THREE.OctahedronGeometry(0.9), m);
+        const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+        c.position.copy(v).multiplyScalar(0.6); c.scale.set(0.6, 1.9, 0.6);
+        c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v);
+        rock.add(c);
+      }
+      g.add(rock);
+      g.add(glowSprite(0xeaf7ff, 10, 0.6));
+      return { group: g, rock: rock, size: 2.2 };
+    }
     const g = new THREE.Group();
     const rock = mesh(jitter(new THREE.DodecahedronGeometry(2.2, 1), 0.5),
       green ? mat(0x2f4a33, { emissive: 0x0a3312, roughness: 0.9, metalness: 0.2 }) : mat(0x55606b, { roughness: 0.95, metalness: 0.2 }));

@@ -248,7 +248,8 @@ body.playing .floating-chat-kofi-popup-iframe-mobi { display: none !important; }
 
 
 /* the three resources */
-.r-s { color: #d9e2ea; }
+.r-s { color: #bfb2a6; }
+.r-a { color: #eaf7ff; text-shadow: none; }
 .r-w { color: #34a9e3; }
 .r-f { color: #39ff6a; }
 #resources span { margin-right: 10px; }
@@ -350,3 +351,42 @@ body:not(.playing) #panel { display: none; }
 }
 .chip:hover { background-color: var(--pink); border-color: var(--pink); }
 .chip.first { border-color: var(--pink); }
+
+/* the Cursed splash, like the arcade games */
+#splash {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background-color: #020611;
+  cursor: pointer;
+  text-align: center;
+  padding: 0 16px;
+  transition: opacity 0.5s;
+}
+#splash.gone { opacity: 0; pointer-events: none; }
+#splash .cursed-logo { width: min(260px, 50vw); }
+#splash .title { margin: 0; color: var(--blue-light); font-size: min(72px, 9vw); letter-spacing: 0.03em; }
+#splash .title span { color: var(--pink); }
+#splash .tag { margin: 0; color: #8fa3b3; font-size: 16px; letter-spacing: 0.25em; text-transform: uppercase; }
+#splash .copyright { margin: 0; color: #8fa3b3; font-size: 14px; }
+#splash .press { margin-top: 18px; color: var(--white); font-size: 16px; animation: splashblink 1.2s steps(2, start) infinite; }
+@keyframes splashblink { to { visibility: hidden; } }
+
+/* short screens (laptops, Windows display scaling): a slimmer panel, so the battlefield keeps its room */
+@media (max-height: 760px) {
+  #panel { padding: 5px 8px; gap: 8px; }
+  #hud { font-size: 12px; line-height: 1.3; }
+  #resources { font-size: 13px; }
+  #radar { width: 128px; height: 128px; }
+  .tab { padding: 3px 10px; font-size: 12px; }
+  #controls { gap: 4px; }
+  #controls .tab-body .button { padding: 4px 8px; font-size: 12px; }
+  #controls .commands .button { padding: 3px 6px; font-size: 11px; }
+  #queues { font-size: 11px; }
+  #message { font-size: 13px; padding: 6px 10px; }
+}

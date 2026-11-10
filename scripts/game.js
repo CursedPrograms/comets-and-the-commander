@@ -16,16 +16,27 @@
   const SAVE_KEY = 'comet-and-commander-save-v1';
 
   const UNIT = {
-    fighter:   { name: 'Fighter',   cost: 70,  build: 4, hp: 80,  dmg: 7,  range: 16, rate: 0.35, speed: 16, accel: 3,   turn: 5,   aggro: 30, bolt: 70, heavy: false },
-    cruiser:   { name: 'Cruiser',   cost: 220, build: 9, hp: 400, dmg: 22, range: 24, rate: 0.9,  speed: 7,  accel: 1.2, turn: 1.4, aggro: 32, bolt: 50, heavy: true },
-    harvester: { name: 'Harvester', cost: 60,  build: 4, hp: 120, dmg: 0,  range: 0,  rate: 0,    speed: 10, accel: 2,   turn: 3,   aggro: 0, cargo: 50, mine: 10 },
+    fighter:   { name: 'Fighter',   cost: { s: 60, f: 15 },  build: 4, hp: 80,  dmg: 7,  range: 16, rate: 0.35, speed: 16, accel: 3,   turn: 5,   aggro: 30, bolt: 70, heavy: false },
+    cruiser:   { name: 'Cruiser',   cost: { s: 160, f: 50 }, build: 9, hp: 400, dmg: 22, range: 24, rate: 0.9,  speed: 7,  accel: 1.2, turn: 1.4, aggro: 32, bolt: 50, heavy: true },
+    harvester: { name: 'Steel harvester', res: 's', cost: { s: 60, f: 10 },  build: 4, hp: 120, dmg: 0,  range: 0,  rate: 0,    speed: 10, accel: 2,   turn: 3,   aggro: 0, cargo: 50, mine: 10 },
     // the very special one (needs a Tech Centre): a lance whose hits splash round the target
-    dreadnought: { name: 'Dreadnought', cost: 1400, build: 30, hp: 3200, dmg: 46, range: 36, rate: 1.1, speed: 5, accel: 0.8, turn: 0.8, aggro: 40, bolt: 55, heavy: true, tech: true, max: 3 },
+    dreadnought: { name: 'Dreadnought', cost: { s: 900, f: 400 }, build: 30, hp: 3200, dmg: 46, range: 36, rate: 1.1, speed: 5, accel: 0.8, turn: 0.8, aggro: 40, bolt: 55, heavy: true, tech: true, max: 3 },
     // takes over a nest (needs a Tech Centre): fly it to a nest, it locks on and the nest becomes yours
-    captor:    { name: 'Usurper',   cost: 600, build: 14, hp: 500, dmg: 0, range: 0, rate: 0, speed: 9, accel: 1.6, turn: 2, aggro: 0, tech: true },
+    captor:    { name: 'Usurper',   cost: { s: 350, f: 150 }, build: 14, hp: 500, dmg: 0, range: 0, rate: 0, speed: 9, accel: 1.6, turn: 2, aggro: 0, tech: true },
     // built by a captured nest for you, in its faction's shape
-    turncoat:  { name: 'Turncoat',  cost: 0, build: 0, hp: 110, dmg: 8, range: 16, rate: 0.45, speed: 14, accel: 2.6, turn: 4, aggro: 34, bolt: 60, heavy: false }
+    turncoat:  { name: 'Turncoat',  cost: {}, build: 0, hp: 110, dmg: 8, range: 16, rate: 0.45, speed: 14, accel: 2.6, turn: 4, aggro: 34, bolt: 60, heavy: false }
   };
+  // the Pathfinder: a scout you can fly yourself (T), outside the sphere too, burning fuel out there; it plants
+  // black holes (Space while flying) that pull in and swallow enemy ships for 20 seconds
+  // a harvester for each resource: meteorites (steel), comets (water), green meteorites (fuel)
+  UNIT.hwater = Object.assign({}, UNIT.harvester, { name: 'Water harvester', res: 'w', model: 'harvester' });
+  UNIT.hfuel = Object.assign({}, UNIT.harvester, { name: 'Fuel harvester', res: 'f', model: 'harvester' });
+  const RES_COLOUR = { s: 0xd9e2ea, w: 0x34a9e3, f: 0x39ff6a };
+  function isH(t) { return !!(UNIT[t] && UNIT[t].res); }
+  function voiceOf(t) { return isH(t) ? 'harvester' : (t === 'fighter' || t === 'cruiser' ? t : 'cruiser'); }
+  UNIT.pathfinder = { name: 'Pathfinder', cost: { s: 250, f: 120 }, build: 12, hp: 600, dmg: 9, range: 22, rate: 0.3, speed: 20, accel: 3, turn: 3, aggro: 30, bolt: 80, heavy: false, max: 1 };
+  const PILOT = { thrust: 34, max: 46, boost: 1.8, turn: 1.9, fuelOut: 2.5 };     // fuel a second, outside the sphere
+  const HOLE = { cost: { f: 250 }, life: 20, pull: 38, horizon: 4.5, strength: 26, max: 3 };
   const CAP = { warships: 250, harvesters: 20, enemies: 100, overlord: 250, queue: 20 };   // a faction's ships at once: 250 with an Overlord, else 100
   const ENEMY = {
     light:    { hp: 50,   dmg: 5,  range: 14, rate: 0.7, speed: 12, accel: 2.5, turn: 4,   bolt: 55 },
@@ -37,22 +48,22 @@
   };
   // research needs a Tech Centre; the Commander's own upgrades don't
   const UPGRADES = {
-    weapons:   { name: 'Weapons',   costs: [300, 600, 1000], build: 12, tech: true },
-    hulls:     { name: 'Hulls',     costs: [300, 600, 1000], build: 12, tech: true },
-    mining:    { name: 'Mining',    costs: [250, 500, 850],  build: 10, tech: true },
-    logistics: { name: 'Logistics', costs: [300, 600, 950],  build: 10, tech: true },
-    armour:    { name: 'Armour',    costs: [250, 500, 900],  build: 12 },     // Commander hull +25% a level
-    guns:      { name: 'Guns',      costs: [250, 500, 900],  build: 12 },     // Commander guns +30% a level
-    tractor:   { name: 'Tractor',   costs: [800],            build: 20 }      // your buildings travel with the Commander
+    weapons:   { name: 'Weapons',   costs: [{ s: 150, w: 150 }, { s: 300, w: 300 }, { s: 500, w: 500 }], build: 12, tech: true },
+    hulls:     { name: 'Hulls',     costs: [{ s: 150, w: 150 }, { s: 300, w: 300 }, { s: 500, w: 500 }], build: 12, tech: true },
+    mining:    { name: 'Mining',    costs: [{ s: 100, w: 150 }, { s: 200, w: 300 }, { s: 350, w: 500 }], build: 10, tech: true },
+    logistics: { name: 'Logistics', costs: [{ s: 150, w: 150 }, { s: 300, w: 300 }, { s: 450, w: 500 }], build: 10, tech: true },
+    armour:    { name: 'Armour',    costs: [{ s: 250 }, { s: 500 }, { s: 900 }], build: 12 },                    // Commander hull +25% a level
+    guns:      { name: 'Guns',      costs: [{ s: 150, f: 100 }, { s: 300, f: 200 }, { s: 550, f: 350 }], build: 12 },   // Commander guns +30% a level
+    tractor:   { name: 'Tractor',   costs: [{ s: 500, f: 300 }], build: 20 }                                    // your buildings travel with the Commander
   };
   // buildings float where they're built; solar plants power the rest (power: + makes, - uses)
   const BUILDINGS = {
-    solar:    { name: 'Solar plant',  cost: 150, build: 8,  hp: 900,  power: 100, model: 'solar' },
-    refinery: { name: 'Refinery',     cost: 300, build: 12, hp: 1400, power: -40, model: 'refinery' },
-    tech:     { name: 'Tech Centre',  cost: 500, build: 18, hp: 1200, power: -60, model: 'tech' },
-    turret:   { name: 'Defence turret', cost: 200, build: 8, hp: 800, power: -20, model: 'turretPlatform' },
-    shipyard: { name: 'Shipyard',     cost: 400, build: 15, hp: 1500, power: -50, model: 'shipyard' },
-    repair:   { name: 'Repair dock',  cost: 250, build: 10, hp: 1000, power: -30, model: 'repairDock' }
+    solar:    { name: 'Solar plant',  cost: { s: 120, w: 40 }, build: 8,  hp: 900,  power: 100, model: 'solar' },
+    refinery: { name: 'Refinery',     cost: { s: 250, w: 80 }, build: 12, hp: 1400, power: -40, model: 'refinery' },
+    tech:     { name: 'Tech Centre',  cost: { s: 300, w: 200 }, build: 18, hp: 1200, power: -60, model: 'tech' },
+    turret:   { name: 'Defence turret', cost: { s: 160, w: 40 }, build: 8, hp: 800, power: -20, model: 'turretPlatform' },
+    shipyard: { name: 'Shipyard',     cost: { s: 320, w: 120 }, build: 15, hp: 1500, power: -50, model: 'shipyard' },
+    repair:   { name: 'Repair dock',  cost: { s: 180, w: 80 }, build: 10, hp: 1000, power: -30, model: 'repairDock' }
   };
   const OUTPOST_R = 55;            // a captured nest's own sphere
   const NESTS_PER_SECTOR = [1, 1, 1, 2, 2, 2, 2, 3, 3, 3];
@@ -60,10 +71,10 @@
   const BOUNTY = { light: 12, heavy: 45, hive: 250, bomber: 30, flagship: 600, miner: 20, turret: 60, rival: 1500 };
   // Waves: sooner, more often and bigger as the game goes on; every fifth is a big one. Each wave also sends raiders
   // in from the edge of your sphere, from any direction, so waves come even when the hives are far away.
-  const WAVES = { first: 40, firstLater: 40, gap: 42, gapPerLevel: 1.5, minGap: 30, big: 5 };   // small and soon, growing evenly
+  const WAVES = { first: 45, firstLater: 45, gap: 50, gapPerLevel: 1.5, minGap: 34, big: 5 };   // small and soon, growing evenly
   // Raids: the other sectors' factions send waves too, wherever you are. They come in at the edge of your sphere
   // from the side their sector lies on; the more of the game that's gone by, the bigger and more often.
-  const RAIDS = { first: 240, gap: [70, 110], minGap: 50 };
+  const RAIDS = { first: 360, gap: [100, 150], minGap: 70 };
   const STRIKE = { first: [70, 110], gap: [45, 90], speed: 46, warn: 3.5, radius: 3.2, shipDamage: 0.7, bigDamage: 0.2 };
   const BEHAVIOURS = ['swarm', 'orbit', 'harass', 'ram', 'snipe', 'regen', 'heal', 'split', 'shield'];
 
@@ -71,7 +82,8 @@
   const $ = (id) => document.getElementById(id);
   const ui = {
     container: $('game-container'), resources: $('resources'), sector: $('sector'), wave: $('wave'), base: $('base-hp'),
-    units: $('unit-count'), power: $('power'), selected: $('selected-info'), queue: $('queue'), queueBar: $('queue-bar'), message: $('message'),
+    units: $('unit-count'), power: $('power'), selected: $('selected-info'), queue: $('queue'), queueBar: $('queue-bar'),
+    bqueue: $('bqueue'), bqueueBar: $('bqueue-bar'), uqueue: $('uqueue'), uqueueBar: $('uqueue-bar'), message: $('message'),
     box: $('select-box'), radar: $('radar'), menu: $('menu'), menuTitle: $('menu-title'), menuText: $('menu-text'),
     map: $('sector-map'), mapCanvas: $('map-canvas'), mapList: $('map-list')
   };
@@ -156,7 +168,8 @@
   // ---------- Game state ----------
   let state = null;
   const units = [], enemies = [], rocks = [], hives = [], strikes = [];
-  const buildings = [], outposts = [], rivals = [], nests = [], enemyBuildings = [];
+  const buildings = [], outposts = [], rivals = [], nests = [], enemyBuildings = [], holes = [];
+  let pilot = null;                 // the Pathfinder while you fly it (third person)
   let sectors = [];
   let focus = null;                 // the sphere the view is on: null = the Commander's, or a captured nest
   let commander = null;
@@ -253,8 +266,12 @@
       this.type = 'commander'; this.name = 'Commander';
       this.t = { speed: 8, accel: 0.5, turn: 0.5 };
       this.turrets = this.model.turrets;
-      this.queue = [];
+      this.queue = [];               // ships
       this.progress = 0;
+      this.bqueue = [];              // buildings, at the same time as the ships
+      this.bprogress = 0;
+      this.uqueue = [];              // research and upgrades, at the same time again
+      this.uprogress = 0;
       this.order = null;
       this.pos.copy(pos);
     }
@@ -271,6 +288,17 @@
       if (this.order) { if (this.steer(this.order.point, this.t.speed, dt, 3)) this.order = null; }
       else this.steer(this.pos, 0, dt, 99);
       this.drawEngines();
+      if (this.bqueue.length) {
+        const item = this.bqueue[0];
+        this.bprogress += dt;
+        if (this.bprogress >= item.time) { this.bqueue.shift(); this.bprogress = 0; finishItem(item); }
+      }
+      if (this.uqueue.length) {
+        const item = this.uqueue[0];
+        // research is slower short of power
+        this.uprogress += dt * (UPGRADES[item.type].tech ? Math.max(0.25, power().ratio) : 1);
+        if (this.uprogress >= item.time) { this.uqueue.shift(); this.uprogress = 0; finishItem(item); }
+      }
       if (this.queue.length) {
         const item = this.queue[0];
         // research is slower short of power; ships quicker with shipyards
@@ -303,6 +331,20 @@
     for (const o of outposts) if (!o.dead && d2(p, o.pos) <= (OUTPOST_R + (extra || 0)) * (OUTPOST_R + (extra || 0))) return true;
     return false;
   }
+  // a power spark from a to b: whatever of `list` it passes through (within 3) takes damage
+  const segTmp = new THREE.Vector3(), segTmp2 = new THREE.Vector3();
+  function zapHurt(a, b, list, dmg, from) {
+    segTmp.subVectors(b, a);
+    const len2 = Math.max(1e-6, segTmp.lengthSq());
+    for (const e of list) {
+      if (e.dead) continue;
+      const t = Math.max(0, Math.min(1, segTmp2.subVectors(e.pos, a).dot(segTmp) / len2));
+      segTmp2.copy(a).addScaledVector(segTmp, t);
+      const r = 3 + (e.radius || 1);
+      if (d2(segTmp2, e.pos) < r * r) { e.hurt(dmg, from); fx.spark(e.pos.clone(), 0xffc977, 2.2); }
+    }
+  }
+
   // everything of yours the enemy can shoot at, and everything of theirs you can
   function playerTargets() { return units.concat(buildings, outposts); }
   function hostiles() { return enemies.concat(hives, rivals, enemyBuildings); }
@@ -326,7 +368,8 @@
     constructor(type, pos, opts) {
       opts = opts || {};
       const t = UNIT[type];
-      super(opts.model || models[type](), Math.round(t.hp * hullMult()), 'player');
+      super(opts.model || models[t.model || type](), Math.round(t.hp * hullMult()), 'player');
+      if (t.res) this.mesh.add(models.glowSprite(RES_COLOUR[t.res], 4, 0.7));
       this.type = type; this.t = t; this.name = t.name;
       this.home = opts.home || null;
       if (opts.faction) { this.name = opts.faction.name + ' turncoat'; this.boltColour = opts.faction.glow; this.faction = opts.faction; }
@@ -346,6 +389,7 @@
     die(from) {
       super.die(from);
       deselect(this);
+      if (this === pilot) stopPiloting('The Pathfinder is lost.');
       say('announce_ship_lost', 10);
     }
     hurt(amount, from) {
@@ -357,15 +401,46 @@
     get base() { return this.home && alive(this.home) ? this.home : commander; }
     update(dt) {
       this.cooldown -= dt;
-      if (this.type === 'harvester') this.updateHarvester(dt);
+      if (this === pilot) this.updatePilot(dt);
+      else if (isH(this.type)) this.updateHarvester(dt);
       else if (this.type === 'captor') this.updateCaptor(dt);
       else this.updateCombat(dt);
       this.drawEngines();
     }
+    // you fly it: W/S thrust and brake, A/D turn, the arrow keys pitch (and turn), Shift boosts. Its guns fire at
+    // whatever is ahead. Outside every sphere of yours it burns fuel; with none left you lose the controls.
+    updatePilot(dt) {
+      const k = keys, boost = k.shift ? PILOT.boost : 1;
+      const yaw = ((k.a ? 1 : 0) - (k.d ? 1 : 0) + (k.arrowleft ? 1 : 0) - (k.arrowright ? 1 : 0)) * PILOT.turn * dt;
+      const pitch = ((k.arrowdown ? 1 : 0) - (k.arrowup ? 1 : 0)) * PILOT.turn * dt;
+      if (yaw) { qTmp.setFromAxisAngle(AX.y, yaw); this.mesh.quaternion.multiply(qTmp); }
+      if (pitch) { qTmp.setFromAxisAngle(AX.x, pitch); this.mesh.quaternion.multiply(qTmp); }
+      this.mesh.quaternion.normalize();
+      const fwd = v2.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+      if (k.w) this.vel.addScaledVector(fwd, PILOT.thrust * boost * dt);
+      if (k.s) this.vel.multiplyScalar(Math.max(0, 1 - 2.5 * dt));
+      this.vel.multiplyScalar(1 - 0.35 * dt);                          // a little drag, so it settles
+      const max = PILOT.max * boost;
+      if (this.vel.length() > max) this.vel.setLength(max);
+      this.pos.addScaledVector(this.vel, dt);
+      if (this.pos.lengthSq() > WORLD_R * WORLD_R) this.pos.setLength(WORLD_R);
+      if (!inSphere(this.pos)) {
+        state.fuel = Math.max(0, state.fuel - PILOT.fuelOut * (k.shift && k.w ? 2 : 1) * dt);
+        if (state.fuel <= 0) { stopPiloting('Out of fuel: the Pathfinder heads home.'); return; }   // (stopPiloting sends it home)
+      }
+      // guns: whatever's in front and in range
+      const t = nearest(hostiles(), this.pos, this.t.range + 4);
+      if (t && v1.subVectors(t.pos, this.pos).normalize().dot(fwd) > 0.3) this.fireAt(t);
+    }
     updateCombat(dt) {
       const o = this.order, base = this.base;
+      const free = this.type === 'pathfinder';          // the Pathfinder goes where it's sent, sphere or not
+      if (free && !inSphere(this.pos, 4)) {
+        state.fuel = Math.max(0, state.fuel - PILOT.fuelOut * 0.5 * dt);
+        if (state.fuel <= 0 && !(o && o.home)) { this.order = { kind: 'move', point: commander.pos.clone().add(this.escort), home: true }; flash('The Pathfinder is out of fuel and heads home.'); }
+      }
       // outside every sphere of yours (the Commander flew off, or a chase ran wide): back inside first
-      if (!inSphere(this.pos, 4) && !(o && o.kind === 'move' && inSphere(o.point))) {
+      if (!free && !inSphere(this.pos, 4) && !(o && o.kind === 'move' && inSphere(o.point))) {
         this.order = { kind: 'move', point: base.pos.clone().add(this.escort) };
         return;
       }
@@ -375,12 +450,14 @@
         if (e) this.fireAt(e);
         return;
       }
-      let target = o && o.kind === 'attack' && alive(o.target) && inSphere(o.target.pos, o.target.radius) ? o.target : null;
+      let target = o && o.kind === 'attack' && alive(o.target) && (free || inSphere(o.target.pos, o.target.radius)) ? o.target : null;
       if (o && o.kind === 'attack' && !target) this.order = null;
       if (!target) {
-        target = inReach(enemies, this.pos, this.t.aggro) || inReach(hives.concat(rivals, enemyBuildings), this.pos, this.t.aggro);
+        target = free ? nearest(hostiles(), this.pos, this.t.aggro)
+                      : inReach(enemies, this.pos, this.t.aggro) || inReach(hives.concat(rivals, enemyBuildings), this.pos, this.t.aggro);
         if (target) this.order = { kind: 'attack', target: target, auto: true };
       }
+      if (!target && free && !inSphere(this.pos)) { this.steer(this.pos, 0, dt, 99); return; }   // holds its position out there
       if (!target) {
         // idle: stay with its base as an escort
         if (d2(this.pos, base.pos) > 34 * 34) this.steer(base.pos.clone().add(this.escort), this.t.speed, dt, 3);
@@ -388,9 +465,9 @@
         return;
       }
       // automatic chases give up when they drag the ship far from its base
-      if (o && o.auto && d2(this.pos, base.pos) > 90 * 90) { this.order = { kind: 'move', point: base.pos.clone().add(this.escort) }; return; }
+      if (o && o.auto && !free && d2(this.pos, base.pos) > 90 * 90) { this.order = { kind: 'move', point: base.pos.clone().add(this.escort) }; return; }
       const dist = Math.sqrt(d2(this.pos, target.pos));
-      if (this.type === 'fighter' || this.type === 'turncoat') {
+      if (this.type === 'fighter' || this.type === 'turncoat' || this.type === 'pathfinder') {
         this.steer(orbitPoint(target.pos, this.axis, target.radius + 7, state.time * 0.9 + this.phase), this.t.speed, dt, 0, true);
       } else if (dist > this.t.range * 0.75 + target.radius) {
         this.steer(target.pos, this.t.speed, dt, this.t.range * 0.75 + target.radius);
@@ -449,7 +526,7 @@
           this.rock = null; this.manual = false;
           let best = Infinity;
           for (const r of rocks) {
-            if (r.dead || d2(r.pos, commander.pos) > 140 * 140) continue;
+            if (r.dead || RES_OF_ROCK[r.kind] !== t.res || d2(r.pos, commander.pos) > 140 * 140) continue;
             if (hives.some((h) => !h.dead && d2(h.pos, r.pos) < 55 * 55)) continue;     // not under an enemy hive's guns
             const d = d2(r.pos, this.pos);
             if (d < best) { best = d; this.rock = r; }
@@ -467,10 +544,12 @@
         if (d2(this.pos, this.rock.pos) > Math.pow(this.rock.radius + 5, 2)) { this.hstate = 'seek'; return; }
         this.steer(this.rock.pos, t.speed, dt, this.rock.radius + 2.5);
         this.face(this.rock.pos, dt);
+        const kind = t.res;
+        this.cargoKind = kind;
         const take = Math.min(t.mine * (1 + 0.3 * state.up.mining) * dt, cap - this.cargo, this.rock.amount);
         this.cargo += take;
         this.rock.take(take);
-        if (Math.random() < dt * 8) { fx.line(this.drill ? this.drill.getWorldPosition(v2) : this.pos, this.rock.pos, COL.pink); sfx.mine(); }
+        if (Math.random() < dt * 8) { fx.line(this.drill ? this.drill.getWorldPosition(v2) : this.pos, this.rock.pos, kind === 'f' ? 0x39ff6a : (kind === 'w' ? COL.light : COL.pink)); sfx.mine(); }
         if (this.cargo >= cap - 0.001) this.hstate = 'return';
       } else if (this.hstate === 'return') {
         // home to the nearest of the Commander and your refineries (a refinery adds a quarter, when it has power)
@@ -478,8 +557,8 @@
         for (const b of buildings) if (!b.dead && b.kind === 'refinery' && d2(this.pos, b.pos) < best) { best = d2(this.pos, b.pos); dock = b; }
         if (this.steer(dock.pos, t.speed, dt, dock.radius + 3)) {
           const bonus = dock === commander ? 1 : 1 + 0.25 * power().ratio;
-          addResources(Math.round(this.cargo * bonus));
-          this.cargo = 0;
+          addRes(this.cargoKind || 's', Math.round(this.cargo * bonus));
+          this.cargo = 0; this.cargoKind = null;
           this.hstate = 'seek';
           sfx.deposit();
         }
@@ -535,7 +614,7 @@
       if (this.kind === 'flagship') {
         fx.explosion(this.pos.clone(), 9, this.colour);
         say('announce_hive_destroyed', 0, true);
-        flash(this.name + ' destroyed! +' + BOUNTY.flagship + ' ore');
+        flash(this.name + ' destroyed! +' + BOUNTY.flagship + ' steel');
         if (this.behaviour === 'split') for (let i = 0; i < 3; i++) spawnEnemy('heavy', this.pos.clone().add(randDirM().multiplyScalar(5)), this.hive);
       }
       if (this.behaviour === 'split' && this.kind === 'light' && !this.mini) {
@@ -555,7 +634,7 @@
         if (b) return b;
       }
       if (this.behaviour === 'harass') {
-        const h = nearest(units.filter((u) => u.type === 'harvester'), this.pos, 160);
+        const h = nearest(units.filter((u) => isH(u.type)), this.pos, 160);
         if (h) return h;
       }
       return nearest(playerTargets(), this.pos, 30) || commander;
@@ -693,7 +772,7 @@
       if (hp !== undefined) this.hp = hp;
       this.pos.copy(pos);
       this.buildTimer = 2 + Math.random() * 4;
-      this.guardMax = (nest ? 6 : 10) + 3 * sector.level;
+      this.guardMax = (nest ? 4 : 6) + 2 * sector.level;
       this.bank = Math.ceil(this.guardMax * 0.6);      // ships ready the first time you come near
       this.turretsUp = nest;                            // nests have no turrets
       this.flagshipDue = false;
@@ -749,6 +828,7 @@
     }
     awake() {
       if (d2(this.pos, commander.pos) < ACTIVE * ACTIVE) return true;
+      if (pilot && d2(this.pos, pilot.pos) < 140 * 140) return true;
       for (const o of outposts) if (!o.dead && d2(this.pos, o.pos) < 150 * 150) return true;
       return false;
     }
@@ -875,7 +955,11 @@
         this.zapTimer -= dt;
         if (this.zapTimer <= 0) {
           this.zapTimer = 0.35 + Math.random() * 0.4;
-          for (const o of buildings) if (o !== this && !o.dead && o.b.power < 0 && d2(o.pos, this.pos) < 140 * 140 && Math.random() < 0.6) fx.zap(this.pos, o.pos, COL.amber);
+          for (const o of buildings) {
+            if (o === this || o.dead || o.b.power >= 0 || d2(o.pos, this.pos) > 140 * 140 || Math.random() > 0.6) continue;
+            fx.zap(this.pos, o.pos, COL.amber);
+            zapHurt(this.pos, o.pos, enemies, 30 * dmgMult(), this);         // the power lines are a fence
+          }
         }
       } else if (this.kind === 'turret') {
         this.cooldown -= dt;
@@ -931,7 +1015,12 @@
       this.zapTimer = 0.4 + Math.random() * 0.5;
       if (d2(this.pos, commander.pos) > 300 * 300) return;
       fx.zap(this.pos, this.owner.pos, this.colour);
-      for (const o of enemyBuildings) if (o !== this && o.owner === this.owner && !o.dead && o.kind !== 'solar' && Math.random() < 0.6) fx.zap(this.pos, o.pos, this.colour);
+      zapHurt(this.pos, this.owner.pos, units, 25, this);
+      for (const o of enemyBuildings) {
+        if (o === this || o.owner !== this.owner || o.dead || o.kind === 'solar' || Math.random() > 0.6) continue;
+        fx.zap(this.pos, o.pos, this.colour);
+        zapHurt(this.pos, o.pos, units, 25, this);                         // their power lines hurt your ships too
+      }
     }
   }
 
@@ -961,7 +1050,7 @@
       for (const e of enemies) if (e.hive === this) e.guard = false;
       for (const b of enemyBuildings) if (b.owner === this && !b.dead) b.hurt(b.maxHp * 2, null);
       say('announce_hive_destroyed', 0, true);
-      flash(this.name + ' destroyed! +' + BOUNTY.rival + ' ore');
+      flash(this.name + ' destroyed! +' + BOUNTY.rival + ' steel');
     }
     powerRatio() {
       let made = 50, used = 0;                          // the carrier makes a little itself
@@ -1013,8 +1102,8 @@
       }
       // attack when the fleet is big enough and you're near, or once the game's gone on a while (later in harder
       // sectors); it keeps a few home to defend
-      const want = Math.min(60, 10 + 4 * this.attacks);
-      const ready = d2(this.pos, commander.pos) < 210 * 210 || state.time > 60 * (10 + 2 * this.sector.level);
+      const want = Math.min(50, 12 + 4 * this.attacks);
+      const ready = d2(this.pos, commander.pos) < 210 * 210 || state.time > 60 * (16 + 3 * this.sector.level);
       if (ready && idle.length >= want + 6) {
         const go = idle.slice(0, idle.length - 6);
         for (const e of go) e.guard = false;
@@ -1025,14 +1114,99 @@
     }
   }
 
+  // A little black hole, planted by the Pathfinder: for 20 seconds it pulls enemy ships in and swallows them
+  // (flagships only take damage; turrets, hives and Overlords are too big to move).
+  class Hole {
+    constructor(pos) {
+      this.model = models.blackHole();
+      this.mesh = this.model.group;
+      this.mesh.position.copy(pos);
+      this.mesh.quaternion.setFromUnitVectors(AX.y, randDirM());
+      this.age = 0; this.eaten = 0; this.dead = false;
+      scene.add(this.mesh);
+      holes.push(this);
+      sfx.warning();
+    }
+    get pos() { return this.mesh.position; }
+    update(dt) {
+      this.age += dt;
+      const left = HOLE.life - this.age;
+      const grow = Math.min(1, this.age / 0.8) * Math.min(1, Math.max(0, left) / 1.5);   // opens, then closes
+      this.mesh.scale.setScalar(Math.max(0.01, grow));
+      this.model.disc.rotation.z += dt * 2.5; this.model.inner.rotation.z -= dt * 4;
+      if (Math.random() < dt * 30) {
+        const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 6;
+        fx.trail(v1.set(Math.cos(a) * r, 0, Math.sin(a) * r).applyQuaternion(this.mesh.quaternion).multiplyScalar(grow).add(this.pos), Math.random() < 0.5 ? 0xff8a3c : COL.pink);
+      }
+      const pull = HOLE.pull * grow;
+      for (const e of enemies) {
+        if (e.dead || e.kind === 'turret') continue;
+        const dd = d2(e.pos, this.pos);
+        if (dd > pull * pull) continue;
+        const d = Math.sqrt(dd);
+        if (e.kind === 'flagship') { e.hurt(220 * dt, null); e.pos.addScaledVector(v1.subVectors(this.pos, e.pos).normalize(), HOLE.strength * 0.25 * dt); continue; }
+        if (d < HOLE.horizon) {
+          // swallowed: no wreck, no explosion; it pays like a kill
+          e.dead = true; e.remove(); deselect(e);
+          addResources(e.mini ? 5 : BOUNTY[e.kind] || 10); state.kills++; this.eaten++;
+          fx.spark(this.pos.clone(), 0xff8a3c, 3);
+          continue;
+        }
+        // the pull grows as they fall in, and drags them round in a spiral
+        const k = HOLE.strength * (0.4 + 1.6 * (1 - d / pull));
+        v1.subVectors(this.pos, e.pos).normalize();
+        v2.copy(v1).cross(AX.y).normalize();
+        e.pos.addScaledVector(v1, k * dt).addScaledVector(v2, k * 0.5 * dt);
+        e.vel.multiplyScalar(1 - Math.min(1, dt * 2));
+      }
+      if (left <= 0) this.finish();
+    }
+    finish() {
+      if (this.dead) return;
+      this.dead = true;
+      scene.remove(this.mesh);
+      fx.explosion(this.pos.clone(), 4, COL.pink);
+      flash('The black hole closed' + (this.eaten ? ': it swallowed ' + plural(this.eaten, 'ship') : ''));
+    }
+  }
+
+  function plantHole() {
+    if (!state || !state.running) return;
+    const pf = units.find((u) => u.type === 'pathfinder' && !u.dead);
+    if (!pf) { flash('Black holes come from the Pathfinder: build one first'); sfx.denied(); return; }
+    if (holes.filter((h) => !h.dead).length >= HOLE.max) { flash('At most ' + HOLE.max + ' black holes at once'); sfx.denied(); return; }
+    if (!pay(HOLE.cost, 'a black hole')) return;
+    const ahead = v1.set(0, 0, 1).applyQuaternion(pf.mesh.quaternion).multiplyScalar(14);
+    new Hole(pf.pos.clone().add(ahead));
+    say('announce_upgrade', 0);
+    flash('Black hole! For ' + HOLE.life + ' seconds it pulls in and swallows enemy ships.');
+  }
+
+  // ---- flying the Pathfinder yourself (third person)
+  function startPiloting() {
+    const pf = units.find((u) => u.type === 'pathfinder' && !u.dead);
+    if (!pf) { flash('Build a Pathfinder to fly it (it needs no Tech Centre)'); sfx.denied(); return; }
+    pilot = pf; pf.order = null; focus = null;
+    select([pf], false, true);
+    flash('Flying the Pathfinder: W thrust, S brake, A/D turn, arrows pitch, Shift boost, Space black hole (' + costText(HOLE.cost) + '), T hands back. Outside your spheres it burns fuel.');
+  }
+  function stopPiloting(why) {
+    if (!pilot) return;
+    const pf = pilot;
+    pilot = null;
+    // it holds where you left it (and takes orders there); only an empty tank sends it home
+    if (!pf.dead) pf.order = state.fuel <= 0 ? { kind: 'move', point: commander.pos.clone().add(pf.escort), home: true } : null;
+    if (why) flash(why);
+  }
+
   class Rock {
     constructor(kind, centre, pos, amount) {
       this.kind = kind;
-      this.model = kind === 'comet' ? models.comet() : models.asteroid();
+      this.model = kind === 'comet' ? models.comet() : models.asteroid(kind === 'fuel');
       this.mesh = this.model.group;
       this.mesh.userData.entity = this;
       this.radius = this.model.size;
-      this.max = kind === 'comet' ? Math.round(rand(900, 1300)) : Math.round(rand(350, 500));
+      this.max = kind === 'comet' ? Math.round(rand(900, 1300)) : (kind === 'fuel' ? Math.round(rand(250, 380)) : Math.round(rand(350, 500)));
       this.amount = amount === undefined ? this.max : amount;
       this.spin = randDir().multiplyScalar(rand(0.1, 0.4));
       this.centre = centre.clone();
@@ -1156,7 +1330,11 @@
 
   function dmgMult() { return 1 + 0.2 * state.up.weapons; }
   function hullMult() { return 1 + 0.2 * (state ? state.up.hulls : 0); }
-  function unitCost(type) { return Math.round(UNIT[type].cost * (1 - 0.12 * state.up.logistics)); }
+  function unitCost(type) {
+    const c = UNIT[type].cost, k = 1 - 0.12 * state.up.logistics, out = {};
+    for (const r in c) out[r] = Math.round(c[r] * k);
+    return out;
+  }
   function buildTime(t) { return t * (1 - 0.15 * state.up.logistics); }
   // shipyards build faster, when they have power (up to two count)
   function buildSpeed() { return 1 + 0.35 * Math.min(2, buildings.filter((b) => !b.dead && b.kind === 'shipyard').length) * power().ratio; }
@@ -1184,9 +1362,9 @@
       if (!s.conquered && s.hives.length && s.hives.every((h) => h.dead) && !rivals.some((r) => r.sector === s && !r.dead)) {
         s.conquered = true;
         const bonus = 400 + 100 * s.level;
-        addResources(bonus);
+        addRes('s', bonus); addRes('w', Math.round(bonus / 2)); addRes('f', Math.round(bonus / 4));
         say('announce_sector', 0, true);
-        flash('Sector ' + (s.level + 1) + ' conquered! +' + bonus + ' ore. ' + (SECTORS - conqueredCount()) + ' to go: open Sectors (N) and pick the next one.');
+        flash('Sector ' + (s.level + 1) + ' conquered! +' + bonus + ' steel, ' + Math.round(bonus / 2) + ' water, ' + Math.round(bonus / 4) + ' fuel. ' + (SECTORS - conqueredCount()) + ' to go: open Sectors (N) and pick the next one.');
         drawMap();
         saveGame(true);
       }
@@ -1195,12 +1373,27 @@
   }
 
   // ---------- Economy, production, upgrades ----------
-  function addResources(n) { state.resources += n; state.mined += Math.max(0, n); }
+  // three resources: steel (meteorites), water (comets), fuel (green meteorites). Kills and conquests pay steel.
+  const RES = { s: 'steel', w: 'water', f: 'fuel' };
+  const RES_OF_ROCK = { asteroid: 's', comet: 'w', fuel: 'f' };
+  function addRes(k, n) { state[RES[k]] += n; state.mined += Math.max(0, n); }
+  function addResources(n) { addRes('s', n); }
+  function canPay(c) { return (state.steel >= (c.s || 0)) && (state.water >= (c.w || 0)) && (state.fuel >= (c.f || 0)); }
+  function costText(c) {
+    const out = [];
+    if (c.s) out.push(c.s + ' steel'); if (c.w) out.push(c.w + ' water'); if (c.f) out.push(c.f + ' fuel');
+    return out.join(', ') || 'free';
+  }
+  function costHtml(c) {
+    const out = [];
+    if (c.s) out.push('<span class="r-s">' + c.s + '</span>'); if (c.w) out.push('<span class="r-w">' + c.w + '</span>'); if (c.f) out.push('<span class="r-f">' + c.f + '</span>');
+    return out.join(' ');
+  }
 
   function hasTech() { return buildings.some((b) => !b.dead && b.kind === 'tech'); }
-  function queued(pred) { return commander.queue.filter(pred).length; }
-  function warshipCount() { return units.filter((u) => !u.dead && u.type !== 'harvester').length + queued((q) => q.kind === 'unit' && q.type !== 'harvester'); }
-  function harvesterCount() { return units.filter((u) => !u.dead && u.type === 'harvester').length + queued((q) => q.type === 'harvester'); }
+  function queued(pred) { return commander.queue.filter(pred).length + commander.bqueue.filter(pred).length + commander.uqueue.filter(pred).length; }
+  function warshipCount() { return units.filter((u) => !u.dead && !isH(u.type)).length + queued((q) => q.kind === 'unit' && !isH(q.type)); }
+  function harvesterCount() { return units.filter((u) => !u.dead && isH(u.type)).length + queued((q) => isH(q.type)); }
   // power: what your solar plants make against what your buildings use; short of it, everything works slower
   let powerCache = null, powerAt = -1;
   function power() {
@@ -1211,13 +1404,14 @@
     powerCache = { made: made, used: used, ratio: used <= 0 ? 1 : Math.min(1, made / used) };
     return powerCache;
   }
-  function queueFull() {
-    if (commander.queue.length < CAP.queue) return false;
-    flash('The build queue is full (' + CAP.queue + ')'); sfx.denied(); return true;
+  function queueFull(which) {     // undefined: ships, true: buildings, 'u': upgrades
+    const q = which === 'u' ? commander.uqueue : (which ? commander.bqueue : commander.queue);
+    if (q.length < CAP.queue) return false;
+    flash('The ' + (which === 'u' ? 'upgrade' : (which ? 'building' : 'ship')) + ' queue is full (' + CAP.queue + ')'); sfx.denied(); return true;
   }
-  function pay(cost, what) {
-    if (state.resources >= cost) { state.resources -= cost; return true; }
-    flash('Not enough ore for ' + what + ' (' + cost + ')'); sfx.denied(); say('announce_no_resources', 4);
+  function pay(c, what) {
+    if (canPay(c)) { state.steel -= c.s || 0; state.water -= c.w || 0; state.fuel -= c.f || 0; return true; }
+    flash('Not enough for ' + what + ': it costs ' + costText(c)); sfx.denied(); say('announce_no_resources', 4);
     return false;
   }
 
@@ -1226,19 +1420,19 @@
     const t = UNIT[type], cost = unitCost(type);
     if (queueFull()) return;
     if (t.tech && !hasTech()) { flash('A ' + t.name + ' needs a Tech Centre'); sfx.denied(); return; }
-    if (type === 'harvester' && harvesterCount() >= CAP.harvesters) { flash('Harvesters are capped at ' + CAP.harvesters); sfx.denied(); return; }
-    if (type !== 'harvester' && warshipCount() >= CAP.warships) { flash('Your fleet is capped at ' + CAP.warships + ' warships'); sfx.denied(); return; }
+    if (isH(type) && harvesterCount() >= CAP.harvesters) { flash('Harvesters are capped at ' + CAP.harvesters); sfx.denied(); return; }
+    if (!isH(type) && warshipCount() >= CAP.warships) { flash('Your fleet is capped at ' + CAP.warships + ' warships'); sfx.denied(); return; }
     if (t.max && units.filter((u) => u.type === type).length + queued((q) => q.type === type) >= t.max) { flash('At most ' + t.max + ' ' + t.name + 's'); sfx.denied(); return; }
     if (!pay(cost, 'a ' + t.name)) return;
-    commander.queue.push({ kind: 'unit', type: type, time: buildTime(t.build), name: t.name });
+    commander.queue.push({ kind: 'unit', type: type, time: buildTime(t.build), name: t.name, cost: cost });
     sfx.queue();
   }
 
   function queueBuilding(kind) {
     if (!state || !state.running) return;
     const b = BUILDINGS[kind];
-    if (queueFull() || !pay(b.cost, 'a ' + b.name)) return;
-    commander.queue.push({ kind: 'building', type: kind, time: b.build, name: b.name });
+    if (queueFull(true) || !pay(b.cost, 'a ' + b.name)) return;
+    commander.bqueue.push({ kind: 'building', type: kind, time: b.build, name: b.name, cost: b.cost });
     sfx.queue();
   }
 
@@ -1248,11 +1442,35 @@
     const level = state.up[kind] + queued((q) => q.type === kind);
     if (level >= u.costs.length) { flash(u.name + ' is fully upgraded'); sfx.denied(); return; }
     if (u.tech && !hasTech()) { flash(u.name + ' research needs a Tech Centre'); sfx.denied(); return; }
-    if (queueFull()) return;
+    if (queueFull('u')) return;
     const cost = u.costs[level];
     if (!pay(cost, u.name + ' ' + (level + 1))) return;
-    commander.queue.push({ kind: 'upgrade', type: kind, time: u.build, name: u.name + (u.costs.length > 1 ? ' ' + (level + 1) : '') });
+    commander.uqueue.push({ kind: 'upgrade', type: kind, time: u.build, name: u.name + (u.costs.length > 1 ? ' ' + (level + 1) : ''), cost: cost });
     sfx.queue();
+  }
+
+  // cancel a queued item: everything it cost comes back (also the one being built). Upgrades queued after it
+  // go too, when they were the next levels of the same thing.
+  const QUEUES = { queue: 'progress', bqueue: 'bprogress', uqueue: 'uprogress' };
+  function cancelItem(qName, index) {
+    const q = commander[qName];
+    if (!q || index < 0 || index >= q.length) return;
+    let gone = [q[index]];
+    if (q[index].kind === 'upgrade') gone = q.filter((x, i) => i >= index && x.type === q[index].type);
+    for (const item of gone) {
+      const c = item.cost || (item.kind === 'unit' ? unitCost(item.type) : item.kind === 'building' ? BUILDINGS[item.type].cost : {});
+      state.steel += c.s || 0; state.water += c.w || 0; state.fuel += c.f || 0;
+      const i = q.indexOf(item);
+      if (i === 0) commander[QUEUES[qName]] = 0;
+      q.splice(i, 1);
+    }
+    sfx.order();
+    flash('Cancelled: ' + gone.map((x) => x.name).join(', ') + ' (refunded)');
+  }
+  // right-click a build button: the last one of that kind comes out of its queue
+  function cancelLast(qName, type) {
+    const q = commander[qName];
+    for (let i = q.length - 1; i >= 0; --i) if (q[i].type === type) { cancelItem(qName, i); return; }
   }
 
   function finishItem(item) {
@@ -1279,7 +1497,7 @@
     const start = new THREE.Vector3(Math.random() * 4 - 2, 2.5, Math.random() * 12 - 6).applyQuaternion(commander.mesh.quaternion).add(commander.pos);
     const u = new Unit(item.type, start);
     u.mesh.quaternion.copy(commander.mesh.quaternion);
-    if (item.type !== 'harvester') u.order = { kind: 'move', point: commander.pos.clone().add(u.escort) };
+    if (!isH(item.type)) u.order = { kind: 'move', point: commander.pos.clone().add(u.escort) };
     sfx.build();
     say(item.type + '_built', 0);
   }
@@ -1296,8 +1514,8 @@
     let n = 0, heavy = 0;
     for (const h of s.hives) {
       if (h.dead || h.nest || d2(h.pos, commander.pos) > (ACTIVE + 60) * (ACTIVE + 60)) continue;
-      const lights = Math.round((2 + s.level * 0.6 + s.wave * 0.8) * swarm * (big ? 1.5 : 1));
-      const heavies = Math.floor((s.wave + s.level) / 3) + (big ? 1 : 0);
+      const lights = Math.round((1.5 + s.level * 0.5 + s.wave * 0.55) * swarm * (big ? 1.4 : 1));
+      const heavies = Math.floor((s.wave + s.level) / 4) + (big ? 1 : 0);
       for (let i = 0; i < lights; i++) spawnEnemy('light', h.pos.clone().add(randDirM().multiplyScalar(9)), h);
       for (let i = 0; i < heavies; i++) spawnEnemy('heavy', h.pos.clone().add(randDirM().multiplyScalar(11)), h);
       if (s.wave >= 2 && s.level >= 2) spawnEnemy('bomber', h.pos.clone().add(randDirM().multiplyScalar(11)), h);
@@ -1333,11 +1551,11 @@
     if (dir.lengthSq() < 1) dir.copy(randDirM()); else dir.normalize();
     const at = commander.pos.clone().addScaledVector(dir, R * 0.95);
     const swarm = sec.faction.behaviour === 'swarm' ? 1.5 : 1;
-    const lights = Math.round((2 + sec.level * 0.4 + state.raids * 0.35) * swarm);
-    const heavies = Math.floor((sec.level + state.raids) / 5);
+    const lights = Math.round((1.5 + sec.level * 0.3 + state.raids * 0.25) * swarm);
+    const heavies = Math.floor((sec.level + state.raids) / 6);
     for (let i = 0; i < lights; i++) spawnEnemy('light', at.clone().add(randDirM().multiplyScalar(7)), hive);
     for (let i = 0; i < heavies; i++) spawnEnemy('heavy', at.clone().add(randDirM().multiplyScalar(9)), hive);
-    if (state.raids >= 3) spawnEnemy('bomber', at.clone().add(randDirM().multiplyScalar(9)), hive);
+    if (state.raids >= 5) spawnEnemy('bomber', at.clone().add(randDirM().multiplyScalar(9)), hive);
     state.raids++;
     say('announce_wave', 0, true);
     flash('RAID! ' + sec.faction.name + ' from sector ' + (sec.level + 1) + ': ' + plural(lights, 'light ship') + (heavies ? ' and ' + heavies + ' heavy' : '') + ' at the edge of your sphere');
@@ -1393,7 +1611,7 @@
     if (!list.length || quiet) return;
     sfx.select();
     const first = list.find((e) => e.team === 'player');
-    if (first) say(first === commander ? 'commander_select' : (['fighter', 'cruiser', 'harvester'].indexOf(first.type) >= 0 ? first.type : 'cruiser') + '_select', 0);
+    if (first) say(first === commander ? 'commander_select' : voiceOf(first.type) + '_select', 0);
   }
   function myShips() { return selection.filter((e) => e.team === 'player' && e !== commander && units.indexOf(e) >= 0); }
 
@@ -1422,24 +1640,27 @@
     if (e instanceof Hive && e.nest && ships.some((u) => u.type === 'captor')) {
       if (!inSphere(e.pos, e.radius)) { flash('Out of reach: fly the Commander closer to the nest first.'); sfx.denied(); marker(e.pos, COL.white); return true; }
       for (const u of ships) if (u.type === 'captor') u.order = { kind: 'capture', nest: e };
-      for (const u of ships) if (u.type !== 'captor' && u.type !== 'harvester') u.order = { kind: 'attack', target: e };
+      for (const u of ships) if (u.type !== 'captor' && !isH(u.type)) u.order = { kind: 'attack', target: e };
       sfx.order(); say('cruiser_attack', 0); marker(e.pos, COL.pink);
       flash('Usurper on its way: it takes over the nest once it locks on (quicker if you beat the nest down first).');
       return true;
     }
-    if (e && e.isEnemy && ships.some((u) => u.type !== 'harvester' && u.type !== 'captor')) {
-      if (!inSphere(e.pos, e.radius)) {
-        flash('Out of reach: your ships only fight inside your sphere. Fly the Commander closer first.');
+    if (e && e.isEnemy && ships.some((u) => !isH(u.type) && u.type !== 'captor')) {
+      const outside = !inSphere(e.pos, e.radius);
+      if (outside && !ships.some((u) => u.type === 'pathfinder')) {
+        flash('Out of reach: your ships only fight inside your sphere (the Pathfinder goes anywhere). Fly the Commander closer first.');
         sfx.denied(); marker(e.pos, COL.white);
         return true;
       }
-      for (const u of ships) if (u.type !== 'harvester' && u.type !== 'captor') u.order = { kind: 'attack', target: e };
+      for (const u of ships) if (!isH(u.type) && u.type !== 'captor' && (!outside || u.type === 'pathfinder')) u.order = { kind: 'attack', target: e };
       const voice = ships.find((u) => u.type === 'fighter' || u.type === 'cruiser');
       sfx.order(); say((voice ? voice.type : 'cruiser') + '_attack', 0); marker(e.pos, COL.white);
       return true;
     }
-    if (e instanceof Rock && ships.some((u) => u.type === 'harvester')) {
-      for (const u of ships) if (u.type === 'harvester') u.order = { kind: 'harvest', rock: e };
+    if (e instanceof Rock && ships.some((u) => isH(u.type))) {
+      const res = RES_OF_ROCK[e.kind], fit = ships.filter((u) => isH(u.type) && UNIT[u.type].res === res);
+      if (!fit.length) { flash('That needs a ' + UNIT[res === 's' ? 'harvester' : res === 'w' ? 'hwater' : 'hfuel'].name.toLowerCase()); sfx.denied(); return true; }
+      for (const u of fit) u.order = { kind: 'harvest', rock: e };
       sfx.order(); say('harvester_harvest', 0); marker(e.pos, COL.white);
       return true;
     }
@@ -1449,6 +1670,7 @@
     centre.divideScalar(movers.length);
     const p = e && e.team === 'player' && e !== commander ? e.pos.clone().add(randDirM().multiplyScalar(e.radius + 4)) : spacePoint(x, y, centre);
     if (!p) return false;
+    const free = p.clone();                      // where the Pathfinder may go: anywhere
     if (withCommander) moveCommander(p, ships.length > 0);
     else intoSphere(p);                          // ships alone go no further than the sphere's edge
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -1456,13 +1678,13 @@
     const cols = Math.ceil(Math.sqrt(ships.length));
     ships.forEach((u, i) => {
       const ox = (i % cols - (cols - 1) / 2) * 4.5, oy = (Math.floor(i / cols) - (cols - 1) / 2) * 4.5;
-      const pt = p.clone().addScaledVector(right, ox).addScaledVector(up, oy);
+      const pt = (u.type === 'pathfinder' ? free : p).clone().addScaledVector(right, ox).addScaledVector(up, oy);
       if (withCommander) pt.add(u.escort.clone().multiplyScalar(0.8));
-      else intoSphere(pt);
+      else if (u.type !== 'pathfinder') intoSphere(pt);
       u.order = { kind: 'move', point: pt };
-      if (u.type === 'harvester') u.hstate = 'seek';
+      if (isH(u.type)) u.hstate = 'seek';
     });
-    if (ships.length) { sfx.order(); const v = ships.find((u) => UNIT[u.type] && ['fighter', 'cruiser', 'harvester'].indexOf(u.type) >= 0); say((v ? v.type : 'cruiser') + '_move', 0); marker(p, COL.pink); }
+    if (ships.length) { sfx.order(); say(voiceOf(ships[0].type) + '_move', 0); marker(p, COL.pink); }
     return true;
   }
 
@@ -1570,11 +1792,14 @@
       else if (groups[k]) select(groups[k].filter(alive), e.shiftKey);
       return;
     }
+    if (k === 't') { if (pilot) stopPiloting('You hand the Pathfinder back: right-click to send it anywhere, inside or outside the sphere.'); else startPiloting(); return; }
+    if (pilot && k === ' ') { e.preventDefault(); plantHole(); return; }
     if (k === 'f') queueUnit('fighter');
     else if (k === 'c') queueUnit('cruiser');
     else if (k === 'h') queueUnit('harvester');
     else if (k === 'g') queueUnit('dreadnought');
     else if (k === 'u') queueUnit('captor');
+    else if (k === 'y') queueUnit('pathfinder');
     else if (k === 'j') nextSphere();
     else if (k === 'x') selectArmy();
     else if (k === 'z') selectHarvesters();
@@ -1587,6 +1812,7 @@
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
   function keyCamera(dt) {
+    if (pilot) return;                              // the keys fly the Pathfinder
     let dx = 0, dy = 0;
     if (keys.a || keys.arrowleft) dx -= 1;
     if (keys.d || keys.arrowright) dx += 1;
@@ -1603,18 +1829,44 @@
     flash(focus ? 'Sphere: ' + focus.name + ' (' + units.filter((u) => u.home === focus).length + ' turncoats)' : 'Sphere: the Commander');
     sfx.select();
   }
-  function selectArmy() { focus = null; select(units.filter((u) => u.type !== 'harvester' && u.type !== 'captor' && !u.home), false); }
-  function selectHarvesters() { select(units.filter((u) => u.type === 'harvester'), false); }
+  function selectArmy() { focus = null; select(units.filter((u) => !isH(u.type) && u.type !== 'captor' && !u.home), false); }
+  function selectHarvesters() { select(units.filter((u) => isH(u.type)), false); }
   function selectBase() { focus = null; if (alive(commander)) select([commander], false); }
 
   // Buttons
   $('build-fighter').addEventListener('click', () => queueUnit('fighter'));
   $('build-cruiser').addEventListener('click', () => queueUnit('cruiser'));
   $('build-harvester').addEventListener('click', () => queueUnit('harvester'));
+  $('build-hwater').addEventListener('click', () => queueUnit('hwater'));
+  $('build-hfuel').addEventListener('click', () => queueUnit('hfuel'));
   $('build-dreadnought').addEventListener('click', () => queueUnit('dreadnought'));
   $('build-captor').addEventListener('click', () => queueUnit('captor'));
   for (const k of Object.keys(BUILDINGS)) $('bld-' + k).addEventListener('click', () => queueBuilding(k));
   $('spheres').addEventListener('click', () => nextSphere());
+  $('build-pathfinder').addEventListener('click', () => queueUnit('pathfinder'));
+  for (const b of document.querySelectorAll('#controls .tab-body .button')) {
+    b.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const id = b.id;
+      if (id.startsWith('build-')) cancelLast('queue', id.slice(6));
+      else if (id.startsWith('bld-')) cancelLast('bqueue', id.slice(4));
+      else if (id.startsWith('up-')) cancelLast('uqueue', id.slice(3));
+    });
+  }
+  for (const qName of Object.keys(QUEUES)) {
+    $(qName + '-chips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (chip) cancelItem(qName, Number(chip.dataset.i));
+    });
+  }
+  // the panel's tabs: Ships, Base, Research
+  for (const tab of document.querySelectorAll('#controls .tab')) {
+    tab.addEventListener('click', () => {
+      for (const el of document.querySelectorAll('#controls .tab, #controls .tab-body')) el.classList.toggle('on', el.dataset.tab === tab.dataset.tab);
+    });
+  }
+  $('fly').addEventListener('click', () => { if (pilot) stopPiloting('You hand the Pathfinder back: right-click to send it anywhere, inside or outside the sphere.'); else startPiloting(); });
+  $('hole').addEventListener('click', () => plantHole());
   for (const k of Object.keys(UPGRADES)) $('up-' + k).addEventListener('click', () => queueUpgrade(k));
   $('select-army').addEventListener('click', selectArmy);
   $('select-harvesters').addEventListener('click', selectHarvesters);
@@ -1719,7 +1971,7 @@
     if (!state.started || state.over) return;
     if (sec === state.current) { flash('You are in this sector'); return; }
     moveCommander(sec.centre.clone().addScaledVector(sec.centre.clone().normalize(), -20));
-    for (const u of units) if (u.type !== 'harvester' && (!u.order || u.order.auto)) u.order = null;   // escorts follow
+    for (const u of units) if (!isH(u.type) && (!u.order || u.order.auto)) u.order = null;   // escorts follow
     flash('Course set for sector ' + (sec.level + 1) + '. Idle ships follow the Commander.');
     toggleMap(false);
   }
@@ -1740,7 +1992,8 @@
 
   // ---------- HUD ----------
   function updateHUD() {
-    ui.resources.textContent = 'Ore: ' + Math.floor(state.resources);
+    ui.resources.innerHTML = '<span class="r-s">Steel ' + Math.floor(state.steel) + '</span> <span class="r-w">Water ' + Math.floor(state.water) +
+      '</span> <span class="r-f">Fuel ' + Math.floor(state.fuel) + '</span>';
     const s = state.current;
     if (s) {
       ui.sector.textContent = 'Sector ' + (s.level + 1) + '/' + SECTORS + ': ' + s.faction.name + (s.conquered ? ' (conquered)' : ', ' + plural(s.hives.filter(alive).length, 'hive'));
@@ -1748,7 +2001,7 @@
       ui.wave.textContent = s.conquered ? 'Conquered ' + conqueredCount() + '/' + SECTORS + '. Open Sectors (N) to move on.' : 'Next wave in ' + Math.max(0, Math.ceil(s.nextWave)) + 's. Conquered ' + conqueredCount() + '/' + SECTORS;
     }
     ui.base.textContent = 'Commander hull: ' + Math.max(0, Math.ceil(commander.hp)) + '/' + commander.maxHp;
-    const army = units.filter((u) => u.type !== 'harvester').length;
+    const army = units.filter((u) => !isH(u.type)).length;
     const pw = power();
     ui.units.textContent = 'Fleet: ' + army + '/' + CAP.warships + ' warships, ' + (units.length - army) + '/' + CAP.harvesters + ' harvesters, ' +
       plural(buildings.length, 'building') + (outposts.length ? ', ' + plural(outposts.length, 'nest') : '') + '. Kills: ' + state.kills;
@@ -1757,9 +2010,10 @@
     if (selection.length === 1) {
       const u = selection[0];
       let txt = u.name + ': hull ' + Math.max(0, Math.ceil(u.hp || 0)) + '/' + Math.round(u.maxHp || 0);
-      if (u instanceof Rock) txt = (u.kind === 'comet' ? 'Comet' : 'Asteroid') + ': ' + Math.floor(u.amount) + ' ore left';
-      if (u.type === 'harvester') txt += ', cargo ' + Math.floor(u.cargo) + ' (' + ({ seek: 'heading out', mine: 'mining', return: 'returning' })[u.hstate] + ')';
+      if (u instanceof Rock) txt = ({ comet: 'Comet', asteroid: 'Meteorite', fuel: 'Green meteorite' })[u.kind] + ': ' + Math.floor(u.amount) + ' ' + RES[RES_OF_ROCK[u.kind]] + ' left';
+      if (isH(u.type)) txt += ', cargo ' + Math.floor(u.cargo) + (u.cargo > 0 && u.cargoKind ? ' ' + RES[u.cargoKind] : '') + ' (' + ({ seek: 'heading out', mine: 'mining', return: 'returning' })[u.hstate] + ')';
       if (u === commander) txt += '. Right-click to move the carrier.';
+      if (u.type === 'pathfinder') txt += u === pilot ? (inSphere(u.pos) ? ', you are flying it' : ', OUTSIDE the sphere: burning fuel') + '. Space: black hole, T: hand back' : '. T flies it yourself';
       if (u.type === 'captor') txt += u.capture > 0 ? ', taking over the nest' : ', right-click a nest to take it over';
       if (u instanceof Building) txt += ' (' + (u.b.power > 0 ? '+' + u.b.power : u.b.power) + ' power)';
       if (u instanceof Outpost) txt += ', ' + plural(units.filter((x) => x.home === u).length, 'turncoat');
@@ -1769,33 +2023,55 @@
       ui.selected.textContent = txt;
     } else if (selection.length > 1) ui.selected.textContent = selection.length + ' ships selected';
     else ui.selected.textContent = 'Nothing selected';
-    const tech = hasTech(), full = commander.queue.length >= CAP.queue;
+    const tech = hasTech(), full = commander.queue.length >= CAP.queue, bfull = commander.bqueue.length >= CAP.queue, ufull = commander.uqueue.length >= CAP.queue;
     for (const type of Object.keys(UNIT)) {
       const b = $('build-' + type);
       if (!b) continue;
       const cost = unitCost(type);
-      b.querySelector('.cost').textContent = cost;
-      b.disabled = !state.running || full || state.resources < cost || (UNIT[type].tech && !tech);
+      b.querySelector('.cost').innerHTML = costHtml(cost);
+      b.disabled = !state.running || full || !canPay(cost) || (UNIT[type].tech && !tech);
     }
     for (const kind of Object.keys(BUILDINGS)) {
       const b = $('bld-' + kind);
-      b.querySelector('.cost').textContent = BUILDINGS[kind].cost;
-      b.disabled = !state.running || full || state.resources < BUILDINGS[kind].cost;
+      b.querySelector('.cost').innerHTML = costHtml(BUILDINGS[kind].cost);
+      b.disabled = !state.running || bfull || !canPay(BUILDINGS[kind].cost);
     }
     for (const kind of Object.keys(UPGRADES)) {
       const u = UPGRADES[kind], max = u.costs.length;
-      const lvl = state.up[kind] + commander.queue.filter((q) => q.type === kind).length;
+      const lvl = state.up[kind] + commander.uqueue.filter((q) => q.type === kind).length;
       const b = $('up-' + kind);
-      b.querySelector('.cost').textContent = lvl >= max ? 'max' : u.costs[lvl];
+      b.querySelector('.cost').innerHTML = lvl >= max ? 'max' : costHtml(u.costs[lvl]);
       b.querySelector('.lvl').textContent = max > 1 ? state.up[kind] : (state.up[kind] ? 'on' : '');
-      b.disabled = !state.running || full || lvl >= max || state.resources < u.costs[lvl] || (u.tech && !tech);
+      b.disabled = !state.running || ufull || lvl >= max || !canPay(u.costs[lvl]) || (u.tech && !tech);
     }
-    if (commander.queue.length) {
-      const item = commander.queue[0];
-      ui.queue.textContent = 'Building ' + item.name + (commander.queue.length > 1 ? ' (+' + (commander.queue.length - 1) + ' queued, ' + commander.queue.length + '/' + CAP.queue + ')' : '');
-      ui.queueBar.style.width = Math.min(100, commander.progress / item.time * 100) + '%';
-      ui.queueBar.parentNode.style.display = 'block';
-    } else { ui.queue.textContent = ''; ui.queueBar.parentNode.style.display = 'none'; }
+    // the two queues: ships, and buildings + upgrades
+    const showQ = (q, prog, label, el, bar, speed) => {
+      if (q.length) {
+        const item = q[0];
+        el.textContent = label + ': ' + item.name + (q.length > 1 ? ' (+' + (q.length - 1) + ', ' + q.length + '/' + CAP.queue + ')' : '');
+        bar.style.width = Math.min(100, prog / item.time * 100) + '%';
+        bar.parentNode.style.display = 'block';
+      } else { el.textContent = ''; bar.parentNode.style.display = 'none'; }
+    };
+    // the chips: one per queued item, rebuilt only when a queue changes
+    for (const qName of Object.keys(QUEUES)) {
+      const q = commander[qName], el = $(qName + '-chips');
+      const sig = q.map((x) => x.name).join('|');
+      if (el.dataset.sig === sig) continue;
+      el.dataset.sig = sig;
+      el.innerHTML = '';
+      q.forEach((x, i) => {
+        const c = document.createElement('span');
+        c.className = 'chip' + (i === 0 ? ' first' : '');
+        c.dataset.i = i;
+        c.textContent = x.name.replace('Defence turret', 'Turret').replace('Solar plant', 'Solar');
+        c.title = 'Click to cancel ' + x.name + ' (refunded)';
+        el.appendChild(c);
+      });
+    }
+    showQ(commander.queue, commander.progress, 'Ships', ui.queue, ui.queueBar);
+    showQ(commander.bqueue, commander.bprogress, 'Base', ui.bqueue, ui.bqueueBar);
+    showQ(commander.uqueue, commander.uprogress, 'Research', ui.uqueue, ui.uqueueBar);
   }
 
   const camUp = new THREE.Vector3(), camRight = new THREE.Vector3();
@@ -1809,6 +2085,7 @@
       const show = e.selected || e.hp < e.maxHp - 0.5;
       e.barBg.visible = e.barFg.visible = show;
       e.ring.position.copy(e.pos);
+      if (e === pilot) { e.ring.visible = false; e.barBg.visible = e.barFg.visible = false; }   // nothing in front of the pilot's view
       if (e.shield && e.shieldGlow !== undefined) e.shield.material.opacity = Math.max(0, e.shieldGlow);
       if (!show) continue;
       const dist = camera.position.distanceTo(e.pos);
@@ -1835,7 +2112,7 @@
     rctx.beginPath(); rctx.moveTo(h, 2); rctx.lineTo(h, s - 2); rctx.moveTo(2, h); rctx.lineTo(s - 2, h); rctx.stroke();
     qInv.copy(camera.quaternion).invert();
     const scale = (h - 4) / (R + 10);
-    const centre = focus && alive(focus) ? focus.pos : commander.pos;
+    const centre = pilot && !pilot.dead ? pilot.pos : (focus && alive(focus) ? focus.pos : commander.pos);
     const dot = (p, colour, size, clampEdge) => {
       v1.copy(p).sub(centre).applyQuaternion(qInv);
       let x = v1.x * scale, y = v1.z * scale;
@@ -1861,8 +2138,10 @@
     for (const b of enemyBuildings) if (!b.dead) dot(b.pos, hex(b.colour), 5);
     for (const b of buildings) if (!b.dead) dot(b.pos, '#ffc977', 5);
     for (const o of outposts) if (!o.dead) dot(o.pos, '#f088e9', 8, true);
-    for (const u of units) if (!u.dead) dot(u.pos, u.selected ? '#f088e9' : (u.type === 'harvester' ? '#ffffff' : '#34A9E3'), 3);
+    for (const u of units) if (!u.dead) dot(u.pos, u.selected ? '#f088e9' : (isH(u.type) ? hex(RES_COLOUR[UNIT[u.type].res]) : '#34A9E3'), 3);
     for (const st of strikes) if (!st.dead) dot(st.mesh.position, '#ffffff', 6, true);
+    for (const h of holes) if (!h.dead) dot(h.pos, '#ff8a3c', 7, true);
+    if (pilot && !pilot.dead) dot(commander.pos, '#f088e9', 8, true);
     dot(centre, '#f088e9', 6);
     rctx.strokeStyle = '#34A9E3';
     rctx.beginPath(); rctx.moveTo(h, h); rctx.lineTo(h - 14, h - 26); rctx.moveTo(h, h); rctx.lineTo(h + 14, h - 26); rctx.stroke();
@@ -1879,7 +2158,9 @@
   function clearWorld() {
     for (const list of [units, enemies, hives, buildings, outposts, rivals, enemyBuildings]) { for (const e of list) e.remove(); list.length = 0; }
     nests.length = 0;
-    focus = null;
+    focus = null; pilot = null;
+    for (const h of holes) if (!h.dead) { h.dead = true; scene.remove(h.mesh); }
+    holes.length = 0;
     for (const r of rocks) { scene.remove(r.mesh); scene.remove(r.ring); }
     rocks.length = 0;
     for (const c of strikes) c.finish(false);
@@ -1930,6 +2211,17 @@
         }
       }
     }
+    // green meteorites (fuel): rarer, further out in each sector
+    for (const s of sectors) {
+      const n = s.level === 0 ? 1 : 1 + (s.level % 2);
+      for (let f = 0; f < n; f++) {
+        const c = s.centre.clone().addScaledVector(randDir(), s.level === 0 ? rand(70, 100) : rand(60, 115));
+        for (let i = 0; i < 3; i++) {
+          new Rock('fuel', s.centre, c.clone().addScaledVector(randDir(), rand(3, 7)), saved ? saved.rocks[rockIndex] : undefined);
+          rockIndex++;
+        }
+      }
+    }
     // nests (capture them) and Overlords: after everything else, so older saves still build the same world
     let nestIndex = 0;
     for (const s of sectors) {
@@ -1965,7 +2257,7 @@
   }
 
   function freshState(seed) {
-    return { seed: seed, resources: 500, mined: 0, kills: 0, running: false, started: false, over: false, time: 0, lastFight: -99,
+    return { seed: seed, steel: 800, water: 300, fuel: 250, mined: 0, kills: 0, running: false, started: false, over: false, time: 0, lastFight: -99,
       nextStrike: STRIKE.first[0] + Math.random() * (STRIKE.first[1] - STRIKE.first[0]), current: null,
       nextRaid: RAIDS.first, raids: 0,
       up: { weapons: 0, hulls: 0, mining: 0, logistics: 0, armour: 0, guns: 0, tractor: 0 } };
@@ -1976,8 +2268,8 @@
     state = freshState(seed);
     buildWorld(seed);
     const c = commander.pos;
-    for (let i = 0; i < 3; i++) new Unit('harvester', c.clone().add(new THREE.Vector3(12 - i * 12, -3, 8)));
-    for (let i = 0; i < 3; i++) new Unit('fighter', c.clone().add(new THREE.Vector3(-8 + i * 8, 7, 16)));
+    ['harvester', 'harvester', 'hwater', 'hfuel'].forEach((t, i) => new Unit(t, c.clone().add(new THREE.Vector3(15 - i * 10, -3, 8))));
+    for (let i = 0; i < 5; i++) new Unit('fighter', c.clone().add(new THREE.Vector3(-12 + i * 6, 7, 16)));
     new Unit('cruiser', c.clone().add(new THREE.Vector3(0, 3, -18)));
     sectors[0].visited = true;
     sectors[0].nextWave = WAVES.first;
@@ -2000,7 +2292,7 @@
   function saveGame(announce) {
     if (!state || !state.started || state.over) return;
     const data = {
-      seed: state.seed, time: state.time, resources: state.resources, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
+      seed: state.seed, time: state.time, steel: state.steel, water: state.water, fuel: state.fuel, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
       nextRaid: state.nextRaid, raids: state.raids,
       sectors: sectors.map((s) => ({ visited: s.visited, conquered: s.conquered, wave: s.wave, nextWave: s.nextWave })),
       hives: [].concat.apply([], sectors.map((s) => s.hives.filter((h) => !h.nest).map((h) => (h.dead ? 0 : Math.round(h.hp))))),
@@ -2011,7 +2303,7 @@
       rivals: RIVAL_LEVELS.map((lvl) => { const r = rivals.find((x) => x.sector.level === lvl); return r && !r.dead ? { hp: Math.round(r.hp), ore: Math.round(r.ore) } : { hp: 0 }; }),
       buildings: buildings.filter(alive).map((b) => ({ kind: b.kind, pos: b.pos.toArray(), hp: Math.round(b.hp) })),
       rocks: rocks.map((r) => Math.round(r.amount)),
-      commander: { pos: commander.pos.toArray(), hp: commander.hp, queue: commander.queue },
+      commander: { pos: commander.pos.toArray(), hp: commander.hp, queue: commander.queue, bqueue: commander.bqueue, uqueue: commander.uqueue },
       units: units.filter((u) => alive(u) && u.type !== 'turncoat').map((u) => ({ type: u.type, pos: u.pos.toArray(), hp: u.hp, cargo: u.cargo }))
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { return; }
@@ -2022,7 +2314,7 @@
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { data = null; }
     if (!data) { newGame(); return; }
     state = freshState(data.seed);
-    Object.assign(state, { time: data.time, resources: data.resources, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike,
+    Object.assign(state, { time: data.time, steel: data.steel !== undefined ? data.steel : (data.resources || 0), water: data.water || 0, fuel: data.fuel || 0, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike,
       nextRaid: data.nextRaid === undefined ? RAIDS.first : data.nextRaid, raids: data.raids || 0 });
     state.up = Object.assign(freshState(0).up, data.up);
     buildWorld(data.seed, { hives: data.hives, rocks: data.rocks, commander: data.commander, nests: data.nests, rivals: data.rivals });
@@ -2030,7 +2322,11 @@
     commander.maxHp = 3000 * (1 + 0.25 * state.up.armour);
     commander.hp = data.commander.hp;
     for (const b of data.buildings || []) new Building(b.kind, new THREE.Vector3().fromArray(b.pos), b.hp);
-    commander.queue = data.commander.queue || [];
+    // older saves kept everything in one queue: split it
+    const all = (data.commander.queue || []).concat(data.commander.bqueue || [], data.commander.uqueue || []);
+    commander.queue = all.filter((q) => q.kind === 'unit');
+    commander.bqueue = all.filter((q) => q.kind === 'building');
+    commander.uqueue = all.filter((q) => q.kind === 'upgrade');
     for (const u of data.units) {
       const unit = new Unit(u.type, new THREE.Vector3().fromArray(u.pos));
       unit.hp = Math.min(unit.maxHp, u.hp); unit.cargo = u.cargo || 0;
@@ -2048,7 +2344,7 @@
     say(won ? 'announce_victory' : 'announce_defeat', 0, true);
     const mins = Math.floor(state.time / 60), secs = Math.round(state.time % 60);
     const text = (won ? 'Every sector is yours.' : 'You conquered ' + conqueredCount() + ' of ' + SECTORS + ' sectors.') +
-      ' Kills: ' + state.kills + '. Ore mined: ' + Math.round(state.mined) + '. Time: ' + mins + 'm ' + secs + 's.';
+      ' Kills: ' + state.kills + '. Mined: ' + Math.round(state.mined) + '. Time: ' + mins + 'm ' + secs + 's.';
     setTimeout(() => openMenu(won ? 'Victory' : 'The Commander has fallen', text), 1500);
   }
 
@@ -2074,6 +2370,8 @@
     for (const o of outposts) if (!o.dead) o.update(dt);
     for (const u of units) if (!u.dead) u.update(dt);
     for (const e of enemies) if (!e.dead) e.update(dt);
+    for (const h of holes) if (!h.dead) h.update(dt);
+    for (let i = holes.length - 1; i >= 0; i--) if (holes[i].dead) holes.splice(i, 1);
 
     const all = units.concat(enemies.filter((e) => e.kind !== 'turret'));
     const bigs = [commander].concat(hives, rivals, outposts, buildings, enemyBuildings);
@@ -2097,6 +2395,7 @@
     }
     for (const list of [units, enemies, hives, buildings, outposts, rivals, enemyBuildings]) for (let i = list.length - 1; i >= 0; i--) if (list[i].dead) list.splice(i, 1);
     if (focus && focus.dead) focus = null;
+    if (pilot && pilot.dead) pilot = null;
 
     // music: the battle track while enemies are close, the calm one otherwise
     if (enemies.some((e) => d2(e.pos, commander.pos) < 80 * 80)) state.lastFight = state.time;
@@ -2105,6 +2404,9 @@
     saveTimer -= dt;
     if (saveTimer <= 0) { saveTimer = 30; saveGame(); }
   }
+
+  const camQ = new THREE.Quaternion();
+  const behind = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.22, Math.PI, 0, 'YXZ'));   // turned round, tipped down
 
   // ---------- Main loop ----------
   let last = performance.now();
@@ -2124,8 +2426,17 @@
       for (const r of rocks) if (!r.dead && d2(r.pos, commander.pos) < 200 * 200) r.update(dt);
       fx.update(dt);
     } else if (state.over) fx.update(dt);
-    const followed = focus && alive(focus) ? focus : commander;
-    if (alive(followed)) cam.target.lerp(followed.pos, Math.min(1, dt * 3));   // follow the Commander (or the sphere you jumped to)
+    if (pilot && !pilot.dead) {
+      // third person: behind and a little above the Pathfinder, looking where it goes
+      cam.target.lerp(pilot.pos, Math.min(1, dt * 8));
+      camQ.copy(pilot.mesh.quaternion).multiply(behind);
+      cam.q.slerp(camQ, Math.min(1, dt * 4));
+      cam.dist += (20 - cam.dist) * Math.min(1, dt * 3);
+      camTween = null;
+    } else {
+      const followed = focus && alive(focus) ? focus : commander;
+      if (alive(followed)) cam.target.lerp(followed.pos, Math.min(1, dt * 3));   // follow the Commander (or the sphere you jumped to)
+    }
     placeCamera();
     edge.position.copy(cam.target);
     sky.position.copy(camera.position);
@@ -2158,8 +2469,9 @@
   window.cometAndCommander = {
     get state() { return state; }, units: units, enemies: enemies, hives: hives, rocks: rocks, strikes: strikes,
     get sectors() { return sectors; }, get commander() { return commander; }, get selection() { return selection; },
-    queueUnit: queueUnit, queueUpgrade: queueUpgrade, queueBuilding: queueBuilding, buildings: buildings, outposts: outposts, rivals: rivals,
-    nests: nests, enemyBuildings: enemyBuildings, power: power, nextSphere: nextSphere, Building: Building, Hive: Hive, Outpost: Outpost, select: select, command: command, step: step, newGame: newGame,
+    queueUnit: queueUnit, queueUpgrade: queueUpgrade, cancelItem: cancelItem, queueBuilding: queueBuilding, buildings: buildings, outposts: outposts, rivals: rivals,
+    nests: nests, enemyBuildings: enemyBuildings, holes: holes, plantHole: plantHole, startPiloting: startPiloting, stopPiloting: stopPiloting,
+    get pilot() { return pilot; }, keys: keys, power: power, nextSphere: nextSphere, Building: Building, Hive: Hive, Outpost: Outpost, select: select, command: command, step: step, newGame: newGame,
     continueGame: continueGame, saveGame: saveGame, toScreen: toScreen, camera: camera, cam: cam, placeCamera: placeCamera,
     lookTowards: lookTowards, travelTo: travelTo, toggleMap: toggleMap, Unit: Unit, Enemy: Enemy, Strike: Strike, fx: fx,
     renderer: renderer, scene: scene, updateWaves: updateWaves, updateRaids: updateRaids

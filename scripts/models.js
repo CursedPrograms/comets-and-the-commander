@@ -467,6 +467,40 @@ window.CC = window.CC || {};
     engine(g, 0.4, 0, -1.9, 0.22, 0.45); engine(g, -0.4, 0, -1.9, 0.22, 0.45);
     return g;
   }
+  // the Pathfinder: a long, fast scout you can fly yourself, outside the sphere too
+  function buildPathfinder() {
+    const g = new THREE.Group();
+    part(sideHull([[3.2, 0], [1.6, 0.35], [-1.6, 0.45], [-2.4, 0.2], [-2.4, -0.25], [1.4, -0.25]], 0.7, 0.06), M.hullDark, 0, 0, 0, g);
+    part(topHull([[0, 2.6], [0.5, 0.4], [2.3, -1.6], [2.3, -2.0], [0.6, -1.5], [0, -2.2], [-0.6, -1.5], [-2.3, -2.0], [-2.3, -1.6], [-0.5, 0.4]], 0.1, 0.03), M.hull, 0, -0.05, 0, g);
+    const c = part(new THREE.SphereGeometry(0.3, 14, 10), M.glass, 0, 0.42, 0.9, g); c.scale.set(0.9, 0.6, 2.4);
+    for (const sx of [-1, 1]) {
+      const st = part(new THREE.BoxGeometry(1.6, 0.03, 0.1), M.stripe, sx * 1.2, 0.07, -0.8, g); st.rotation.y = sx * 0.62;
+      part(new THREE.SphereGeometry(0.1, 8, 6), M.stripe, sx * 2.3, 0, -1.8, g);
+      const fin = part(sideHull([[0, 0], [-0.6, 0.7], [-0.9, 0.7], [-0.8, 0]], 0.05, 0.02), M.hullBlue, sx * 0.3, 0.3, -1.2, g); fin.rotation.z = -sx * 0.5;
+    }
+    engine(g, 0.25, 0.05, -2.4, 0.18, 0.5); engine(g, -0.25, 0.05, -2.4, 0.18, 0.5);
+    return g;
+  }
+  function pathfinder() { const m = make('pathfinder', buildPathfinder); m.size = 2.4; return m; }
+
+  // a little black hole: a black core, a hot accretion disc and a glow; parts the game spins
+  function blackHole() {
+    materials();
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.SphereGeometry(2.2, 24, 16), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    g.add(core);
+    const discMat = new THREE.MeshBasicMaterial({ color: 0xff8a3c, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+    const disc = new THREE.Mesh(new THREE.RingGeometry(2.8, 7.5, 48, 1), discMat);
+    disc.rotation.x = Math.PI / 2;
+    g.add(disc);
+    const inner = new THREE.Mesh(new THREE.RingGeometry(2.3, 3.6, 48, 1), new THREE.MeshBasicMaterial({ color: COL.pink, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    inner.rotation.x = Math.PI / 2;
+    g.add(inner);
+    const halo = glowSprite(0xff8a3c, 22, 0.35); g.add(halo);
+    const ring = ringSprite(COL.pink, 70); ring.material.opacity = 0.25; g.add(ring);   // how far it pulls
+    return { group: g, disc: disc, inner: inner, ring: ring, core: core, size: 2.2 };
+  }
+
   function solar() { const m = make('solar', buildSolar); m.size = 5; return m; }
   function refinery() { const m = make('refinery', buildRefinery); m.size = 4.5; return m; }
   function tech() { const m = make('tech', buildTech); m.size = 4.5; return m; }
@@ -681,12 +715,15 @@ window.CC = window.CC || {};
     return { group: g, rock: rock, tail: tail, size: 2.2 };
   }
 
-  function asteroid() {
+  // a meteorite: steel (grey rock, steel crystals) or, green, fuel
+  function asteroid(green) {
     const g = new THREE.Group();
-    const rock = mesh(jitter(new THREE.DodecahedronGeometry(2.2, 1), 0.5), mat(0x55606b, { roughness: 0.95, metalness: 0.2 }));
+    const rock = mesh(jitter(new THREE.DodecahedronGeometry(2.2, 1), 0.5),
+      green ? mat(0x2f4a33, { emissive: 0x0a3312, roughness: 0.9, metalness: 0.2 }) : mat(0x55606b, { roughness: 0.95, metalness: 0.2 }));
     g.add(rock);
+    if (green) g.add(glowSprite(0x39ff6a, 9, 0.45));
     for (let i = 0; i < 5; i++) {
-      const c = mesh(new THREE.OctahedronGeometry(0.45), lightMat(COL.pink));
+      const c = mesh(new THREE.OctahedronGeometry(0.45), green ? lightMat(0x39ff6a) : mat(0xd9e2ea, { metalness: 1, roughness: 0.15, emissive: 0x2a3440 }));
       const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
       c.position.copy(v).multiplyScalar(2.1); c.scale.set(0.6, 1.4, 0.6);
       c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v);
@@ -925,6 +962,6 @@ window.CC = window.CC || {};
 
   COL.enemy = ENEMY_GLOW;
   CC.COL = COL;
-  CC.models = { factionMats: factionMats, factionShip: factionShip, environment: environment, fighter: fighter, cruiser: cruiser, harvester: harvester, mothership: mothership, raider: raider, destroyer: destroyer, hive: hive, solar: solar, refinery: refinery, tech: tech, turretPlatform: turretPlatform, shipyard: shipyard, repairDock: repairDock, dreadnought: dreadnought, captor: captor, rivalCarrier: rivalCarrier, comet: comet, asteroid: asteroid, glowSprite: glowSprite, ringSprite: ringSprite, backdrop: backdrop };
+  CC.models = { factionMats: factionMats, factionShip: factionShip, environment: environment, fighter: fighter, cruiser: cruiser, harvester: harvester, mothership: mothership, raider: raider, destroyer: destroyer, hive: hive, pathfinder: pathfinder, blackHole: blackHole, solar: solar, refinery: refinery, tech: tech, turretPlatform: turretPlatform, shipyard: shipyard, repairDock: repairDock, dreadnought: dreadnought, captor: captor, rivalCarrier: rivalCarrier, comet: comet, asteroid: asteroid, glowSprite: glowSprite, ringSprite: ringSprite, backdrop: backdrop };
   CC.fx = { trail: trail, setScene: setScene, bolt: bolt, spark: spark, explosion: explosion, shieldFlash: shieldFlash, line: line, zap: zap, update: update, clear: clear };
 })(window.CC);

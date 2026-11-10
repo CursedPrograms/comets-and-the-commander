@@ -22,19 +22,7 @@ html, body {
   touch-action: none;
 }
 
-#hud {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 10;
-  max-width: calc(100% - 20px);
-  padding: 8px 12px;
-  background-color: var(--navy);
-  border: 2px solid var(--blue-dark);
-  font-size: 15px;
-  line-height: 1.5;
-  pointer-events: none;
-}
+
 
 #resources {
   font-size: 18px;
@@ -44,64 +32,24 @@ html, body {
 
 #wave { color: var(--pink); }
 
-#queue:empty { display: none; }
 
-#hud .bar {
-  display: none;
-  width: 200px;
-  max-width: 100%;
-  height: 6px;
-  margin-top: 4px;
-  background-color: var(--blue-dark);
-}
 
-#queue-bar {
+
+
+#queue-bar, #bqueue-bar, #uqueue-bar {
   width: 0;
   height: 100%;
   background-color: var(--pink);
 }
 
 
-#radar {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 10;
-  width: 170px;
-  height: 170px;
-  border: 2px solid var(--blue-dark);
-  cursor: pointer;
-}
 
-#message {
-  display: none;
-  position: absolute;
-  top: 192px;
-  right: 10px;
-  z-index: 10;
-  max-width: 320px;
-  padding: 8px 12px;
-  background-color: var(--blue-dark);
-  border: 2px solid var(--blue-light);
-  pointer-events: none;
-}
 
-#controls {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 8px;
-  z-index: 10;
-  padding: 0 8px;
-}
 
-#controls .row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 6px;
-}
+
+
+
+
 
 .button {
   background-color: var(--blue-dark);
@@ -298,11 +246,107 @@ body.playing .floating-chat-kofi-popup-iframe-mobi { display: none !important; }
   padding: 60px 16px;
 }
 
-@media (max-width: 700px) {
-  #hud { font-size: 12px; padding: 5px 7px; max-width: calc(100% - 130px); line-height: 1.35; }
-  #resources { font-size: 15px; }
-  #radar { width: 104px; height: 104px; }
-  #message { top: 130px; left: 10px; right: 10px; max-width: none; font-size: 13px; }
-  .button { padding: 7px 8px; font-size: 12px; }
-  #controls .row { gap: 4px; margin-top: 4px; }
+
+/* the three resources */
+.r-s { color: #d9e2ea; }
+.r-w { color: #34a9e3; }
+.r-f { color: #39ff6a; }
+#resources span { margin-right: 10px; }
+.button .cost .r-s, .button .cost .r-w, .button .cost .r-f { margin-left: 2px; }
+
+/* ---------- the bottom panel (Age of Empires style) ---------- */
+#panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(230px, 1.1fr) minmax(360px, 2.6fr) minmax(170px, 0.9fr) auto;
+  gap: 10px;
+  padding: 8px 10px;
+  background-color: var(--navy);
+  border-top: 2px solid var(--blue-dark);
 }
+
+#hud {
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#resources { font-size: 15px; font-weight: bold; white-space: nowrap; }
+
+#controls { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+#controls .tabs { display: flex; gap: 4px; }
+.tab {
+  background-color: var(--navy);
+  border: 2px solid var(--blue-dark);
+  border-bottom: none;
+  color: #7f99aa;
+  padding: 4px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tab.on { color: var(--white); border-color: var(--blue-light); background-color: var(--blue-dark); }
+.tab-body { display: none; flex-wrap: wrap; gap: 5px; }
+.tab-body.on { display: flex; }
+#controls .row.commands { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
+#controls .commands .button { padding: 4px 8px; font-size: 12px; }
+
+#queues { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }
+#queues .q { min-height: 26px; }
+#queues .bar { display: none; width: 100%; height: 6px; margin-top: 3px; background-color: var(--blue-dark); }
+
+#radar {
+  width: 170px;
+  height: 170px;
+  border: 2px solid var(--blue-dark);
+  cursor: pointer;
+}
+
+/* messages float just above the panel, in the middle */
+#message {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 205px;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: min(640px, calc(100% - 20px));
+  padding: 8px 12px;
+  background-color: var(--blue-dark);
+  border: 2px solid var(--blue-light);
+  pointer-events: none;
+  text-align: center;
+}
+
+body:not(.playing) #panel { display: none; }
+
+@media (max-width: 1100px) {
+  #panel { grid-template-columns: minmax(200px, 1fr) minmax(300px, 2.2fr) auto; }
+  #queues { display: none; }
+}
+@media (max-width: 700px) {
+  #panel { grid-template-columns: 1fr auto; gap: 6px; padding: 5px 6px; }
+  #hud { font-size: 11px; line-height: 1.3; }
+  #resources { font-size: 13px; }
+  #controls { grid-column: 1 / -1; order: 3; }
+  #radar { width: 96px; height: 96px; }
+  #message { bottom: 250px; font-size: 13px; }
+  #controls .button { padding: 5px 7px; font-size: 12px; }
+}
+
+/* each queue's items: click one to cancel it (a full refund) */
+.chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.chip {
+  background-color: var(--blue-dark);
+  border: 1px solid var(--blue);
+  color: var(--white);
+  font-size: 11px;
+  padding: 1px 5px;
+  cursor: pointer;
+}
+.chip:hover { background-color: var(--pink); border-color: var(--pink); }
+.chip.first { border-color: var(--pink); }

@@ -14,56 +14,73 @@
 <body>
   <div id="game-container">
     <div id="loading">Loading...</div>
-    <div id="hud">
-      <div id="resources">Ore: 500</div>
-      <div id="sector"></div>
-      <div id="wave"></div>
-      <div id="base-hp"></div>
-      <div id="unit-count"></div>
-      <div id="power"></div>
-      <div id="selected-info">Nothing selected</div>
-      <div id="queue"></div>
-      <div class="bar"><div id="queue-bar"></div></div>
-    </div>
-    <canvas id="radar" width="170" height="170" title="Radar: click to turn towards a spot"></canvas>
     <div id="message"></div>
     <div id="select-box"></div>
-    <div id="controls">
-      <div class="row">
-        <button class="button" id="build-fighter" title="Build a fighter (F)">Fighter <span class="cost">70</span></button>
-        <button class="button" id="build-cruiser" title="Build a cruiser (C)">Cruiser <span class="cost">220</span></button>
-        <button class="button" id="build-harvester" title="Build a harvester (H), up to 20">Harvester <span class="cost">60</span></button>
-        <button class="button" id="build-dreadnought" title="Dreadnought (G): your very special ship, a lance that splashes. Needs a Tech Centre, up to 3">Dreadnought <span class="cost">1400</span></button>
-        <button class="button" id="build-captor" title="Usurper (U): right-click a nest to take it over. Needs a Tech Centre">Usurper <span class="cost">600</span></button>
-        <button class="button upgrade" id="up-armour" title="Commander armour: +25% hull per level">Armour <span class="lvl">0</span> <span class="cost">250</span></button>
-        <button class="button upgrade" id="up-guns" title="Commander guns: +30% damage, faster, per level">Guns <span class="lvl">0</span> <span class="cost">250</span></button>
-        <button class="button upgrade" id="up-tractor" title="Tractor beam: your buildings travel with the Commander">Tractor <span class="lvl"></span> <span class="cost">800</span></button>
+    <!-- everything at the bottom, Age of Empires style: status, commands, queues, the radar -->
+    <div id="panel">
+      <div id="hud">
+        <div id="resources"></div>
+        <div id="sector"></div>
+        <div id="wave"></div>
+        <div id="base-hp"></div>
+        <div id="unit-count"></div>
+        <div id="power"></div>
+        <div id="selected-info">Nothing selected</div>
       </div>
-      <div class="row">
-        <button class="button build" id="bld-solar" title="Solar plant: +100 power for your other buildings">Solar <span class="cost">150</span></button>
-        <button class="button build" id="bld-refinery" title="Refinery: harvesters unload here, a quarter more ore (-40 power)">Refinery <span class="cost">300</span></button>
-        <button class="button build" id="bld-tech" title="Tech Centre: research, the Dreadnought and the Usurper (-60 power)">Tech Centre <span class="cost">500</span></button>
-        <button class="button build" id="bld-turret" title="Defence turret: a static gun platform (-20 power)">Turret <span class="cost">200</span></button>
-        <button class="button build" id="bld-shipyard" title="Shipyard: ships build faster, up to two count (-50 power)">Shipyard <span class="cost">400</span></button>
-        <button class="button build" id="bld-repair" title="Repair dock: repairs ships and buildings near it (-30 power)">Repair dock <span class="cost">250</span></button>
-        <button class="button upgrade" id="up-weapons" title="Weapons research: +20% damage per level (Tech Centre)">Weapons <span class="lvl">0</span> <span class="cost">300</span></button>
-        <button class="button upgrade" id="up-hulls" title="Hulls research: +20% hull per level (Tech Centre)">Hulls <span class="lvl">0</span> <span class="cost">300</span></button>
-        <button class="button upgrade" id="up-mining" title="Mining research: faster mining and bigger cargo (Tech Centre)">Mining <span class="lvl">0</span> <span class="cost">250</span></button>
-        <button class="button upgrade" id="up-logistics" title="Logistics research: cheaper ships, built faster (Tech Centre)">Logistics <span class="lvl">0</span> <span class="cost">300</span></button>
+      <div id="controls">
+        <div class="tabs">
+          <button class="tab on" data-tab="ships">Ships</button>
+          <button class="tab" data-tab="base">Base</button>
+          <button class="tab" data-tab="research">Research</button>
+        </div>
+        <div class="tab-body on" data-tab="ships">
+          <button class="button" id="build-fighter" title="Build a fighter (F)">Fighter <span class="cost"></span></button>
+          <button class="button" id="build-cruiser" title="Build a cruiser (C)">Cruiser <span class="cost"></span></button>
+          <button class="button" id="build-harvester" title="Steel harvester (H): mines meteorites">Steel harv. <span class="cost"></span></button>
+          <button class="button" id="build-hwater" title="Water harvester: mines comets">Water harv. <span class="cost"></span></button>
+          <button class="button" id="build-hfuel" title="Fuel harvester: mines green meteorites">Fuel harv. <span class="cost"></span></button>
+          <button class="button" id="build-pathfinder" title="Pathfinder (Y): a scout you fly yourself (T), outside the sphere too; it plants black holes">Pathfinder <span class="cost"></span></button>
+          <button class="button" id="build-dreadnought" title="Dreadnought (G): your very special ship, a lance that splashes. Needs a Tech Centre, up to 3">Dreadnought <span class="cost"></span></button>
+          <button class="button" id="build-captor" title="Usurper (U): right-click a nest to take it over. Needs a Tech Centre">Usurper <span class="cost"></span></button>
+        </div>
+        <div class="tab-body" data-tab="base">
+          <button class="button build" id="bld-solar" title="Solar plant: +100 power for your other buildings">Solar <span class="cost"></span></button>
+          <button class="button build" id="bld-refinery" title="Refinery: harvesters unload here, a quarter more of what they carry (-40 power)">Refinery <span class="cost"></span></button>
+          <button class="button build" id="bld-tech" title="Tech Centre: research, the Dreadnought and the Usurper (-60 power)">Tech Centre <span class="cost"></span></button>
+          <button class="button build" id="bld-turret" title="Defence turret: a static gun platform (-20 power)">Turret <span class="cost"></span></button>
+          <button class="button build" id="bld-shipyard" title="Shipyard: ships build faster, up to two count (-50 power)">Shipyard <span class="cost"></span></button>
+          <button class="button build" id="bld-repair" title="Repair dock: repairs ships and buildings near it (-30 power)">Repair dock <span class="cost"></span></button>
+        </div>
+        <div class="tab-body" data-tab="research">
+          <button class="button upgrade" id="up-weapons" title="Weapons research: +20% damage per level (Tech Centre)">Weapons <span class="lvl">0</span> <span class="cost"></span></button>
+          <button class="button upgrade" id="up-hulls" title="Hulls research: +20% hull per level (Tech Centre)">Hulls <span class="lvl">0</span> <span class="cost"></span></button>
+          <button class="button upgrade" id="up-mining" title="Mining research: faster mining and bigger cargo (Tech Centre)">Mining <span class="lvl">0</span> <span class="cost"></span></button>
+          <button class="button upgrade" id="up-logistics" title="Logistics research: cheaper ships, built faster (Tech Centre)">Logistics <span class="lvl">0</span> <span class="cost"></span></button>
+          <button class="button upgrade" id="up-armour" title="Commander armour: +25% hull per level">Armour <span class="lvl">0</span> <span class="cost"></span></button>
+          <button class="button upgrade" id="up-guns" title="Commander guns: +30% damage, faster, per level">Guns <span class="lvl">0</span> <span class="cost"></span></button>
+          <button class="button upgrade" id="up-tractor" title="Tractor beam: your buildings travel with the Commander">Tractor <span class="lvl"></span> <span class="cost"></span></button>
+        </div>
+        <div class="row commands">
+          <button class="button secondary" id="select-army" title="Select all warships (X)">Army</button>
+          <button class="button secondary" id="select-harvesters" title="Select all harvesters (Z)">Harvesters</button>
+          <button class="button secondary" id="select-base" title="Select the Commander (B)">Commander</button>
+          <button class="button secondary" id="fly" title="Fly the Pathfinder yourself, third person (T)">Fly</button>
+          <button class="button secondary" id="hole" title="The Pathfinder plants a black hole: 20 seconds, swallows enemy ships (250 fuel; Space while flying)">Black hole</button>
+          <button class="button secondary" id="spheres" title="Jump between your spheres: the Commander's and every nest you've captured (J)">Spheres</button>
+          <button class="button secondary" id="select-none" title="Deselect">Deselect</button>
+          <button class="button secondary" id="open-map" title="Sector map (N)">Sectors</button>
+          <button class="button secondary" id="home" title="Reset the view (Home)">View</button>
+          <button class="button secondary" id="sound" title="Sound (M)">Sound on</button>
+          <button class="button secondary" id="pause" title="Menu (Esc)">Menu</button>
+        </div>
       </div>
-      <div class="row">
-        <button class="button secondary" id="select-army" title="Select all warships (X)">Army</button>
-        <button class="button secondary" id="select-harvesters" title="Select all harvesters (Z)">Harvesters</button>
-        <button class="button secondary" id="select-base" title="Select the Commander (B)">Commander</button>
-        <button class="button secondary" id="spheres" title="Jump between your spheres: the Commander's and every nest you've captured (J)">Spheres</button>
-        <button class="button secondary" id="select-none" title="Deselect">Deselect</button>
-        <button class="button secondary" id="open-map" title="Sector map (N)">Sectors</button>
-        <button class="button secondary" id="home" title="Reset the view (Home)">View</button>
-        <button class="button secondary" id="sound" title="Sound (M)">Sound on</button>
-        <button class="button secondary" id="pause" title="Menu (Esc)">Menu</button>
+      <div id="queues">
+        <div class="q"><div id="queue"></div><div class="bar"><div id="queue-bar"></div></div><div class="chips" id="queue-chips"></div></div>
+        <div class="q"><div id="bqueue"></div><div class="bar"><div id="bqueue-bar"></div></div><div class="chips" id="bqueue-chips"></div></div>
+        <div class="q"><div id="uqueue"></div><div class="bar"><div id="uqueue-bar"></div></div><div class="chips" id="uqueue-chips"></div></div>
       </div>
+      <canvas id="radar" width="170" height="170" title="Radar: click to turn towards a spot"></canvas>
     </div>
-
     <div id="sector-map" hidden>
       <div class="panel">
         <div class="panel-head">
@@ -93,13 +110,15 @@
           <h2>How to play</h2>
           <ul>
             <li>Space is split into ten sectors, each held by a different enemy faction. Destroy every hive in a sector to conquer it, then conquer all ten.</li>
-            <li>Harvesters mine comets and asteroids near the Commander and bring the ore home. Build more of them early.</li>
+            <li>Three resources, each with its own harvester: meteorites give steel, comets give water, the rarer green meteorites give fuel. Ships cost steel and fuel, buildings steel and water; fuel also powers black holes and the Pathfinder outside your spheres. Harvesters unload at the Commander or a refinery.</li>
             <li>Spend ore on ships and on upgrades: weapons, hulls, mining and logistics (cheaper, faster ships). Everything is built in the Commander's queue.</li>
             <li>The Commander repairs ships near it. Idle warships escort it when it moves.</li>
             <li>Your ships only fight inside your sphere round the Commander. To attack a hive, fly the Commander to it.</li>
             <li>Waves come often and grow; every fifth is a big one, and raiders come in from the edge of your sphere.</li>
             <li>The other sectors raid you too, from the side they lie on: watch the edge of your sphere.</li>
             <li>Rare comets streak in from any direction. Watch for the blinking line and get out of the way.</li>
+            <li>The Pathfinder is a scout you fly yourself (T, third person): W thrust, S brake, A/D turn, arrows pitch, Shift boost. It can leave your sphere (burning fuel) and plants black holes (Space): for 20 seconds they pull in and swallow enemy ships.</li>
+            <li>Three queues build at once: ships, base buildings, and research. Click an item in a queue (bottom panel) to cancel it, or right-click its button: everything it cost comes back.</li>
             <li>Buildings float where they're built, round the Commander: solar plants make power, and sparks carry it to the rest. Short of power, everything works slower. Buy the Tractor and they travel with you.</li>
             <li>A Tech Centre unlocks research, the Dreadnought (your very special ship) and the Usurper.</li>
             <li>Two kinds of hive: spires you destroy, nests you capture. A nest can't be destroyed: send a Usurper (right-click the nest). A captured nest is a sphere of your empire and builds its faction's ships for you. Spheres (J) jumps between them.</li>
@@ -114,7 +133,7 @@
           <h2>Touch</h2>
           <ul><li>Tap a ship, then tap where it should go. Drag to look around, pinch to zoom.</li></ul>
           <h2>Keys</h2>
-          <ul><li>F, C, H build, G Dreadnought, U Usurper. J jumps between your spheres. X army, Z harvesters, B Commander. N sector map. WASD or arrows turn the view, Q/E zoom. P pause, M sound, Esc menu.</li></ul>
+          <ul><li>F, C, H build, G Dreadnought, U Usurper, Y Pathfinder. T flies the Pathfinder, Space plants a black hole while flying. J jumps between your spheres. X army, Z harvesters, B Commander. N sector map. WASD or arrows turn the view, Q/E zoom. P pause, M sound, Esc menu.</li></ul>
         </div>
         <p class="credit">&copy; Cursed Entertainment</p>
       </div>

@@ -69,6 +69,10 @@
     smelter:  { name: 'Smelter',      cost: { s: 300, w: 150 }, build: 14, hp: 1300, power: -50, model: 'refinery' }
   };
   const OUTPOST_R = 55;            // a captured nest's own sphere
+  const BUILD_R = 50;              // every building's own sphere: your ships can fight there
+  const LINK = 120;                // buildings this close are one network (their power lines reach)
+  // a colony (a network the Commander has left) brings in resources slowly: per building a second
+  const COLONY = { s: 0.5, w: 0.3, refinery: 1.2, f: 0.06 };
   const NESTS_PER_SECTOR = [1, 1, 1, 2, 2, 2, 2, 3, 3, 3];
   const RIVAL_LEVELS = [2, 4, 6, 8, 9];   // sectors with an Overlord: an enemy commander who plays like you
   const BOUNTY = { light: 12, heavy: 45, hive: 250, bomber: 30, flagship: 600, miner: 20, turret: 60, rival: 1500 };
@@ -332,7 +336,56 @@
     const r = R + (extra || 0);
     if (commander && d2(p, commander.pos) <= r * r) return true;
     for (const o of outposts) if (!o.dead && d2(p, o.pos) <= (OUTPOST_R + (extra || 0)) * (OUTPOST_R + (extra || 0))) return true;
+    const rb = BUILD_R + (extra || 0);
+    for (const b of buildings) if (!b.dead && d2(p, b.pos) <= rb * rb) return true;
     return false;
+  }
+  // into the nearest sphere of yours (the Commander's unless a building's or a nest's is nearer)
+  function intoAnySphere(p) {
+    if (inSphere(p)) return p;
+    let best = commander, bd = d2(p, commander.pos), r = R;
+    for (const b of buildings) if (!b.dead && d2(p, b.pos) < bd) { best = b; bd = d2(p, b.pos); r = BUILD_R; }
+    for (const o of outposts) if (!o.dead && d2(p, o.pos) < bd) { best = o; bd = d2(p, o.pos); r = OUTPOST_R; }
+    if (bd > r * 0.9 * r * 0.9) p.sub(best.pos).setLength(r * 0.9).add(best.pos);
+    return p;
+  }
+
+  // ---------- networks: buildings linked by their power lines; the ones the Commander has left are colonies ----------
+  let networks = [], netAt = -1;
+  function updateNetworks() {
+    const list = buildings.filter(alive);
+    const parent = list.map((_, i) => i);
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++)
+        if (d2(list[i].pos, list[j].pos) < LINK * LINK) parent[find(i)] = find(j);
+    const groups = {};
+    list.forEach((b, i) => { (groups[find(i)] = groups[find(i)] || []).push(b); });
+    const before = networks.filter((n) => n.colony).length;
+    networks = Object.values(groups).map((bs) => {
+      const c = new THREE.Vector3();
+      for (const b of bs) c.add(b.pos);
+      c.divideScalar(bs.length);
+      const home = bs.some((b) => d2(b.pos, commander.pos) < (R + BUILD_R) * (R + BUILD_R));
+      return { buildings: bs, centre: c, colony: !home, anchor: bs[0] };
+    });
+    const colonies = networks.filter((n) => n.colony).length;
+    if (colonies > before && state.time > 2) {
+      say('announce_sector', 0, true);
+      flash('Your base stays behind as a colony: its own sphere, its own network, and it brings in resources slowly. Spheres (J) jumps to it; send ships there to guard it.');
+    }
+  }
+  function colonyIncome(dt) {
+    for (const n of networks) {
+      if (!n.colony) continue;
+      const p = power().ratio;
+      for (const b of n.buildings) {
+        if (b.dead) continue;
+        const k = b.kind === 'refinery' ? COLONY.refinery : 1;
+        state.steel += COLONY.s * k * dt * p; state.water += COLONY.w * k * dt * p;
+        if (b.kind === 'refinery') state.fuel += COLONY.f * 4 * dt * p;
+      }
+    }
   }
   // a power spark from a to b: whatever of `list` it passes through (within 3) takes damage
   const segTmp = new THREE.Vector3(), segTmp2 = new THREE.Vector3();
@@ -401,7 +454,7 @@
       if (!this.dead && from && !from.dead && from.isEnemy && this.t.dmg > 0 && !this.order) this.order = { kind: 'attack', target: from, auto: true };
     }
     // where it belongs: a nest's turncoats stay with their nest, everything else with the Commander
-    get base() { return this.home && alive(this.home) ? this.home : commander; }
+    get base() { return this.home && alive(this.home) ? this.home : (this.post && alive(this.post) ? this.post : commander); }
     update(dt) {
       this.cooldown -= dt;
       if (this === pilot) this.updatePilot(dt);
@@ -945,8 +998,13 @@
       this.offset = pos.clone().sub(commander.pos);
       this.zapTimer = Math.random();
       if (kind === 'smelter') { this.mesh.add(models.glowSprite(0xeaf7ff, 16, 0.55)); this.mesh.scale.setScalar(0.9); }
+      this.sphere = new THREE.Mesh(new THREE.SphereGeometry(BUILD_R, 20, 10), new THREE.MeshBasicMaterial({ color: COL.light, wireframe: true, transparent: true, opacity: 0.035, depthWrite: false }));
+      this.sphere.position.copy(pos);
+      scene.add(this.sphere);
       buildings.push(this);
     }
+    remove() { super.remove(); scene.remove(this.sphere); }
+    keepSphere() { this.sphere.position.copy(this.pos); }
     die(from) {
       super.die(from);
       deselect(this);
@@ -955,6 +1013,7 @@
       flash('Your ' + this.name + ' was destroyed.');
     }
     update(dt) {
+      this.keepSphere();
       if (state.up.tractor) {
         // the tractor beam: keep station on the Commander
         v1.copy(commander.pos).add(this.offset);
@@ -1684,16 +1743,23 @@
     if (!p) return false;
     const free = p.clone();                      // where the Pathfinder may go: anywhere
     if (withCommander) moveCommander(p, ships.length > 0);
-    else intoSphere(p);                          // ships alone go no further than the sphere's edge
+    else intoAnySphere(p);                       // ships alone go no further than your spheres' edges
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
     const cols = Math.ceil(Math.sqrt(ships.length));
     ships.forEach((u, i) => {
       const ox = (i % cols - (cols - 1) / 2) * 4.5, oy = (Math.floor(i / cols) - (cols - 1) / 2) * 4.5;
       const pt = (u.type === 'pathfinder' ? free : p).clone().addScaledVector(right, ox).addScaledVector(up, oy);
-      if (withCommander) pt.add(u.escort.clone().multiplyScalar(0.8));
-      else if (u.type !== 'pathfinder') intoSphere(pt);
+      if (withCommander) { pt.add(u.escort.clone().multiplyScalar(0.8)); u.post = null; }
+      else if (u.type !== 'pathfinder') intoAnySphere(pt);
       u.order = { kind: 'move', point: pt };
+      // sent into a building's sphere away from the Commander: posted there, it guards that network
+      if (!withCommander && !isH(u.type) && u.type !== 'pathfinder' && d2(pt, commander.pos) > R * R) {
+        let nb = null, bd = BUILD_R * BUILD_R * 1.2;
+        for (const b of buildings) if (!b.dead && d2(b.pos, pt) < bd) { nb = b; bd = d2(b.pos, pt); }
+        u.post = nb;
+        if (nb) u.escort = pt.clone().sub(nb.pos);
+      } else if (!withCommander) u.post = null;
       if (isH(u.type)) u.hstate = 'seek';
     });
     if (ships.length) { sfx.order(); say(voiceOf(ships[0].type) + '_move', 0); marker(p, COL.pink); }
@@ -1835,10 +1901,14 @@
     if (dx || dy) rotateCamera(dx * dt * 1.6, dy * dt * 1.6);
   }
   function nextSphere() {
-    const list = [null].concat(outposts.filter(alive));
-    if (list.length === 1) { focus = null; flash('Capture a nest with a Usurper to get another sphere'); return; }
+    const cols = networks.filter((n) => n.colony && alive(n.anchor)).map((n) => n.anchor);
+    const list = [null].concat(outposts.filter(alive), cols);
+    if (list.length === 1) { focus = null; flash('No other spheres yet: leave a base behind (a colony) or capture a nest with a Usurper'); return; }
     focus = list[(list.indexOf(focus) + 1) % list.length];
-    flash(focus ? 'Sphere: ' + focus.name + ' (' + units.filter((u) => u.home === focus).length + ' turncoats)' : 'Sphere: the Commander');
+    let what = 'the Commander';
+    if (focus instanceof Outpost) what = focus.name + ' (' + units.filter((u) => u.home === focus).length + ' turncoats)';
+    else if (focus) { const n = networks.find((x) => x.anchor === focus); what = 'a colony: ' + plural(n ? n.buildings.length : 1, 'building') + ', ' + plural(units.filter((u) => u.post && n && n.buildings.indexOf(u.post) >= 0).length, 'ship') + ' guarding it'; }
+    flash('Sphere: ' + what);
     sfx.select();
   }
   function selectArmy() { focus = null; select(units.filter((u) => !isH(u.type) && u.type !== 'captor' && !u.home), false); }
@@ -2018,7 +2088,9 @@
     const pw = power();
     ui.units.textContent = 'Fleet: ' + army + '/' + CAP.warships + ' warships, ' + (units.length - army) + '/' + CAP.harvesters + ' harvesters, ' +
       plural(buildings.length, 'building') + (outposts.length ? ', ' + plural(outposts.length, 'nest') : '') + '. Kills: ' + state.kills;
-    ui.power.textContent = 'Power: ' + pw.made + ' made, ' + pw.used + ' used' + (pw.ratio < 1 ? ' (LOW: ' + Math.round(pw.ratio * 100) + '%)' : '');
+    const cols = networks.filter((n) => n.colony).length;
+    ui.power.textContent = 'Power: ' + pw.made + ' made, ' + pw.used + ' used' + (pw.ratio < 1 ? ' (LOW: ' + Math.round(pw.ratio * 100) + '%)' : '') +
+      (networks.length > 1 || cols ? '. Networks: ' + networks.length + (cols ? ' (' + plural(cols, 'colony').replace('colonys', 'colonies') + ')' : '') : '');
     ui.power.style.color = pw.ratio < 1 ? '#f088e9' : '';
     if (selection.length === 1) {
       const u = selection[0];
@@ -2149,7 +2221,7 @@
     for (const e of enemies) if (!e.dead) dot(e.pos, hex(e.colour), e.kind === 'flagship' ? 7 : (e.kind === 'light' ? 3 : 4));
     for (const r of rivals) if (!r.dead) dot(r.pos, hex(r.colour), 9, d2(r.pos, centre) < ACTIVE * ACTIVE);
     for (const b of enemyBuildings) if (!b.dead) dot(b.pos, hex(b.colour), 5);
-    for (const b of buildings) if (!b.dead) dot(b.pos, '#ffc977', 5);
+    for (const b of buildings) if (!b.dead) dot(b.pos, '#ffc977', 5, networks.some((n) => n.colony && n.buildings.indexOf(b) >= 0));
     for (const o of outposts) if (!o.dead) dot(o.pos, '#f088e9', 8, true);
     for (const u of units) if (!u.dead) dot(u.pos, u.selected ? '#f088e9' : (isH(u.type) ? hex(RES_COLOUR[UNIT[u.type].res]) : '#34A9E3'), 3);
     for (const st of strikes) if (!st.dead) dot(st.mesh.position, '#ffffff', 6, true);
@@ -2171,7 +2243,7 @@
   function clearWorld() {
     for (const list of [units, enemies, hives, buildings, outposts, rivals, enemyBuildings]) { for (const e of list) e.remove(); list.length = 0; }
     nests.length = 0;
-    focus = null; pilot = null;
+    focus = null; pilot = null; networks = []; netAt = -1;
     for (const h of holes) if (!h.dead) { h.dead = true; scene.remove(h.mesh); }
     holes.length = 0;
     for (const r of rocks) { scene.remove(r.mesh); scene.remove(r.ring); }
@@ -2378,6 +2450,8 @@
     if (checkTimer <= 0) { checkTimer = 0.5; checkSectors(); if (state.over) return; }
     updateWaves(dt);
     updateRaids(dt);
+    if (state.time - netAt > 1) { netAt = state.time; updateNetworks(); }
+    colonyIncome(dt);
     state.nextStrike -= dt;
     if (state.nextStrike <= 0) { state.nextStrike = STRIKE.gap[0] + Math.random() * (STRIKE.gap[1] - STRIKE.gap[0]); new Strike(); }
     for (const c of strikes) if (!c.dead) c.update(dt);

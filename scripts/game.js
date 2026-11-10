@@ -1,4 +1,4 @@
-// Comet & Commander - a 3D space RTS (three.js r128)
+// Comets and the Commander - a 3D space RTS (three.js r128)
 // Fly your Commander carrier through a sphere of ten sectors. Mine comets and asteroids, build a
 // fleet, research upgrades and conquer every sector's enemy hives. The battle happens all around you.
 (function (CC) {
@@ -30,7 +30,13 @@
     mining:    { name: 'Mining',    costs: [100, 220, 350], build: 8 },
     logistics: { name: 'Logistics', costs: [120, 250, 380], build: 8 }
   };
-  const BOUNTY = { light: 15, heavy: 60, hive: 300 };
+  const BOUNTY = { light: 12, heavy: 45, hive: 250 };
+  // Waves: sooner, more often and bigger as the game goes on; every fifth is a big one. Each wave also sends raiders
+  // in from the edge of your sphere, from any direction, so waves come even when the hives are far away.
+  const WAVES = { first: 75, firstLater: 50, gap: 48, gapPerLevel: 2, minGap: 28, big: 5 };
+  // Raids: the other sectors' factions send waves too, wherever you are. They come in at the edge of your sphere
+  // from the side their sector lies on; the more of the game that's gone by, the bigger and more often.
+  const RAIDS = { first: 150, gap: [70, 110], minGap: 45 };
   const STRIKE = { first: [70, 110], gap: [45, 90], speed: 46, warn: 3.5, radius: 3.2, shipDamage: 0.7, bigDamage: 0.2 };
   const BEHAVIOURS = ['swarm', 'orbit', 'harass', 'ram', 'snipe', 'regen', 'heal', 'split', 'shield'];
 
@@ -255,9 +261,19 @@
           if (Math.random() < dt * 2) fx.line(this.pos, u.pos, COL.light);
         }
       }
-      if (state.time - this.lastHit > 8) this.hp = Math.min(this.maxHp, this.hp + 3 * dt);
+      if (state.time - this.lastHit > 10) this.hp = Math.min(this.maxHp, this.hp + 1.5 * dt);
     }
   }
+
+  // Your ships fight only inside the battle sphere round the Commander (R): no orders to attack or fly beyond it,
+  // and a ship that ends up outside it comes back.
+  function inSphere(p, extra) { const r = R + (extra || 0); return !!commander && d2(p, commander.pos) <= r * r; }
+  function intoSphere(p, centre) {
+    const c = centre || commander.pos;
+    if (d2(p, c) > R * 0.9 * R * 0.9) p.sub(c).setLength(R * 0.9).add(c);
+    return p;
+  }
+  function inReach(list, p, maxDist) { return nearest(list.filter((e) => inSphere(e.pos, e.radius || 0)), p, maxDist); }
 
   function orbitPoint(centre, axis, r, a) {
     const u = new THREE.Vector3(1, 0, 0).cross(axis);
@@ -302,16 +318,21 @@
     }
     updateCombat(dt) {
       const o = this.order;
+      // outside the sphere (the Commander flew off, or a chase ran wide): back inside it first
+      if (!inSphere(this.pos, 4) && !(o && o.kind === 'move' && inSphere(o.point))) {
+        this.order = { kind: 'move', point: commander.pos.clone().add(this.escort) };
+        return;
+      }
       if (o && o.kind === 'move') {
         if (this.steer(o.point, this.t.speed, dt, 1.5)) this.order = null;
-        const e = nearest(enemies.concat(hives), this.pos, this.t.range + 6);
+        const e = inReach(enemies.concat(hives), this.pos, this.t.range + 6);
         if (e) this.fireAt(e);
         return;
       }
-      let target = o && o.kind === 'attack' && alive(o.target) ? o.target : null;
+      let target = o && o.kind === 'attack' && alive(o.target) && inSphere(o.target.pos, o.target.radius) ? o.target : null;
       if (o && o.kind === 'attack' && !target) this.order = null;
       if (!target) {
-        target = nearest(enemies, this.pos, this.t.aggro) || nearest(hives, this.pos, this.t.aggro);
+        target = inReach(enemies, this.pos, this.t.aggro) || inReach(hives, this.pos, this.t.aggro);
         if (target) this.order = { kind: 'attack', target: target, auto: true };
       }
       if (!target) {
@@ -388,13 +409,13 @@
       opts = opts || {};
       const sector = hive.sector, f = sector.faction, t = ENEMY[kind];
       const model = models.factionShip(f, kind);
-      const mult = (1 + 0.15 * sector.level + 0.06 * sector.wave) * (opts.mini ? 0.3 : 1) * (f.behaviour === 'swarm' ? 0.7 : 1);
+      const mult = (1 + 0.18 * sector.level + 0.1 * sector.wave) * (opts.mini ? 0.3 : 1) * (f.behaviour === 'swarm' ? 0.7 : 1);
       super(model, Math.round(t.hp * mult), 'enemy');
       this.faction = f;
       this.colour = f.glow;
       this.barFg.material.color.setHex(f.glow);
       this.kind = kind; this.type = kind; this.t = t; this.name = f.name + (kind === 'heavy' ? ' heavy' : '');
-      this.dmg = t.dmg * (1 + 0.08 * sector.level);
+      this.dmg = t.dmg * (1 + 0.1 * sector.level + 0.03 * sector.wave);
       this.behaviour = f.behaviour === 'mixed' ? BEHAVIOURS[Math.floor(Math.random() * BEHAVIOURS.length)] : f.behaviour;
       this.hive = hive; this.guard = !!opts.guard; this.mini = !!opts.mini;
       this.phase = Math.random() * Math.PI * 2;
@@ -507,9 +528,9 @@
       }
       this.guardTimer -= dt;
       if (this.guardTimer <= 0) {
-        this.guardTimer = 45;
+        this.guardTimer = 30;
         const guards = enemies.filter((e) => e.hive === this && e.guard).length;
-        if (guards < 1 + Math.floor(this.sector.level / 3)) new Enemy('light', this.pos.clone().add(randDirM().multiplyScalar(10)), this, { guard: true });
+        if (guards < 2 + Math.floor(this.sector.level / 2)) new Enemy('light', this.pos.clone().add(randDirM().multiplyScalar(10)), this, { guard: true });
       }
     }
   }
@@ -660,7 +681,7 @@
     const here = sectorAt(commander.pos);
     if (here !== state.current) {
       state.current = here;
-      if (!here.visited) { here.visited = true; here.nextWave = here.level === 0 ? 120 : 80; }
+      if (!here.visited) { here.visited = true; here.nextWave = here.level === 0 ? WAVES.first : WAVES.firstLater; }
       if (!here.conquered) {
         if (state.time > 1) say('announce_enter', 0, true);
         flash('Sector ' + (here.level + 1) + ': ' + here.faction.name + '. ' + here.faction.about);
@@ -730,20 +751,55 @@
     if (!s || s.conquered || !s.hives.some(alive)) return;
     s.nextWave -= dt;
     if (s.nextWave > 0) return;
-    s.nextWave = 65;
-    let n = 0, big = 0;
+    s.nextWave = Math.max(WAVES.minGap, WAVES.gap - WAVES.gapPerLevel * s.level - s.wave);
+    const big = (s.wave + 1) % WAVES.big === 0;
+    const swarm = s.faction.behaviour === 'swarm' ? 1.5 : 1;
+    let n = 0, heavy = 0;
     for (const h of s.hives) {
       if (h.dead || d2(h.pos, commander.pos) > (ACTIVE + 60) * (ACTIVE + 60)) continue;
-      const lights = Math.round((1 + Math.floor(s.level / 2) + s.wave) * (s.faction.behaviour === 'swarm' ? 1.5 : 1));
-      const heavies = Math.floor((s.wave + s.level) / 3);
+      const lights = Math.round((2 + s.level * 0.6 + s.wave * 1.4) * swarm * (big ? 1.6 : 1));
+      const heavies = Math.floor((s.wave + s.level) / 2) + (big ? 1 : 0);
       for (let i = 0; i < lights; i++) new Enemy('light', h.pos.clone().add(randDirM().multiplyScalar(9)), h);
       for (let i = 0; i < heavies; i++) new Enemy('heavy', h.pos.clone().add(randDirM().multiplyScalar(11)), h);
-      n += lights; big += heavies;
+      n += lights; heavy += heavies;
     }
+    // raiders: in from the edge of your sphere, all from one side
+    const home = s.hives.filter(alive).sort((a, b) => d2(a.pos, commander.pos) - d2(b.pos, commander.pos))[0];
+    const raiders = Math.round((1 + Math.floor(s.wave / 2) + Math.floor(s.level / 2)) * swarm * (big ? 2 : 1));
+    const from = commander.pos.clone().add(randDirM().multiplyScalar(R * 0.95));
+    for (let i = 0; i < raiders; i++) new Enemy('light', from.clone().add(randDirM().multiplyScalar(6)), home);
+    if (s.wave >= 3 && (big || s.level >= 4)) { new Enemy('heavy', from.clone().add(randDirM().multiplyScalar(8)), home); heavy++; }
+    n += raiders;
     s.wave++;
-    if (!n && !big) return;
     say('announce_wave', 0, true);
-    flash(s.faction.name + ' wave ' + s.wave + ': ' + n + ' light ship' + (n === 1 ? '' : 's') + (big ? ' and ' + big + ' heavy' : '') + ' incoming');
+    flash((big ? 'BIG WAVE! ' : '') + s.faction.name + ' wave ' + s.wave + ': ' + plural(n, 'light ship') + (heavy ? ' and ' + heavy + ' heavy' : '') + ' incoming, raiders at the edge of your sphere');
+  }
+
+  // ---------- Raids from the other sectors ----------
+  function updateRaids(dt) {
+    state.nextRaid -= dt;
+    if (state.nextRaid > 0) return;
+    const here = state.current;
+    const from = sectors.filter((x) => x !== here && !x.conquered && x.hives.some(alive));
+    const gap = RAIDS.gap[0] + Math.random() * (RAIDS.gap[1] - RAIDS.gap[0]);
+    state.nextRaid = Math.max(RAIDS.minGap, gap - state.raids * 2);
+    if (!from.length) return;
+    // nearer sectors raid more often: pick by 1 / distance
+    const weights = from.map((x) => 1 / Math.max(80, x.centre.distanceTo(commander.pos)));
+    let pick = Math.random() * weights.reduce((a, b) => a + b, 0), sec = from[0];
+    for (let i = 0; i < from.length; i++) { pick -= weights[i]; if (pick <= 0) { sec = from[i]; break; } }
+    const hive = sec.hives.find(alive);
+    const dir = sec.centre.clone().sub(commander.pos);
+    if (dir.lengthSq() < 1) dir.copy(randDirM()); else dir.normalize();
+    const at = commander.pos.clone().addScaledVector(dir, R * 0.95);
+    const swarm = sec.faction.behaviour === 'swarm' ? 1.5 : 1;
+    const lights = Math.round((2 + sec.level * 0.5 + state.raids * 0.6) * swarm);
+    const heavies = Math.floor((sec.level + state.raids) / 4);
+    for (let i = 0; i < lights; i++) new Enemy('light', at.clone().add(randDirM().multiplyScalar(7)), hive);
+    for (let i = 0; i < heavies; i++) new Enemy('heavy', at.clone().add(randDirM().multiplyScalar(9)), hive);
+    state.raids++;
+    say('announce_wave', 0, true);
+    flash('RAID! ' + sec.faction.name + ' from sector ' + (sec.level + 1) + ': ' + plural(lights, 'light ship') + (heavies ? ' and ' + heavies + ' heavy' : '') + ' at the edge of your sphere');
   }
 
   // ---------- Voice ----------
@@ -823,6 +879,11 @@
     if (!ships.length && !withCommander) return false;
     const e = entityAt(x, y);
     if (e && e.isEnemy && ships.some((u) => u.type !== 'harvester')) {
+      if (!inSphere(e.pos, e.radius)) {
+        flash('Out of reach: your ships only fight inside your sphere. Fly the Commander closer first.');
+        sfx.denied(); marker(e.pos, COL.white);
+        return true;
+      }
       for (const u of ships) if (u.type !== 'harvester') u.order = { kind: 'attack', target: e };
       sfx.order(); say(ships.find((u) => u.type !== 'harvester').type + '_attack', 0); marker(e.pos, COL.white);
       return true;
@@ -839,6 +900,7 @@
     const p = e && e.team === 'player' && e !== commander ? e.pos.clone().add(randDirM().multiplyScalar(e.radius + 4)) : spacePoint(x, y, centre);
     if (!p) return false;
     if (withCommander) moveCommander(p, ships.length > 0);
+    else intoSphere(p);                          // ships alone go no further than the sphere's edge
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
     const cols = Math.ceil(Math.sqrt(ships.length));
@@ -846,6 +908,7 @@
       const ox = (i % cols - (cols - 1) / 2) * 4.5, oy = (Math.floor(i / cols) - (cols - 1) / 2) * 4.5;
       const pt = p.clone().addScaledVector(right, ox).addScaledVector(up, oy);
       if (withCommander) pt.add(u.escort.clone().multiplyScalar(0.8));
+      else intoSphere(pt);
       u.order = { kind: 'move', point: pt };
       if (u.type === 'harvester') u.hstate = 'seek';
     });
@@ -1022,7 +1085,7 @@
   function openMenu(title, text) {
     const inGame = state && state.started && !state.over;
     if (inGame) { state.running = false; saveGame(); }
-    ui.menuTitle.textContent = title || 'Comet & Commander';
+    ui.menuTitle.textContent = title || 'Comets and the Commander';
     ui.menuText.textContent = text || 'Fly your Commander carrier through ten sectors of space. Mine comets, build a fleet, research upgrades and conquer every sector.';
     $('menu-resume').hidden = !inGame;
     $('menu-continue').hidden = inGame || !hasSave();
@@ -1286,6 +1349,7 @@
   function freshState(seed) {
     return { seed: seed, resources: 500, mined: 0, kills: 0, running: false, started: false, over: false, time: 0, lastFight: -99,
       nextStrike: STRIKE.first[0] + Math.random() * (STRIKE.first[1] - STRIKE.first[0]), current: null,
+      nextRaid: RAIDS.first, raids: 0,
       up: { weapons: 0, hulls: 0, mining: 0, logistics: 0 } };
   }
 
@@ -1298,7 +1362,7 @@
     for (let i = 0; i < 3; i++) new Unit('fighter', c.clone().add(new THREE.Vector3(-8 + i * 8, 7, 16)));
     new Unit('cruiser', c.clone().add(new THREE.Vector3(0, 3, -18)));
     sectors[0].visited = true;
-    sectors[0].nextWave = 120;
+    sectors[0].nextWave = WAVES.first;
     begin();
     say('announce_start', 0, true);
     flash('Harvesters mine on their own: build more of them, then a fleet. Destroy the hives to conquer this sector.');
@@ -1319,6 +1383,7 @@
     if (!state || !state.started || state.over) return;
     const data = {
       seed: state.seed, time: state.time, resources: state.resources, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
+      nextRaid: state.nextRaid, raids: state.raids,
       sectors: sectors.map((s) => ({ visited: s.visited, conquered: s.conquered, wave: s.wave, nextWave: s.nextWave })),
       hives: [].concat.apply([], sectors.map((s) => s.hives.map((h) => (h.dead ? 0 : Math.round(h.hp))))),
       rocks: rocks.map((r) => Math.round(r.amount)),
@@ -1333,7 +1398,8 @@
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { data = null; }
     if (!data) { newGame(); return; }
     state = freshState(data.seed);
-    Object.assign(state, { time: data.time, resources: data.resources, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike });
+    Object.assign(state, { time: data.time, resources: data.resources, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike,
+      nextRaid: data.nextRaid === undefined ? RAIDS.first : data.nextRaid, raids: data.raids || 0 });
     buildWorld(data.seed, { hives: data.hives, rocks: data.rocks, commander: data.commander });
     data.sectors.forEach((s, i) => Object.assign(sectors[i], s));
     commander.hp = data.commander.hp;
@@ -1365,6 +1431,7 @@
     checkTimer -= dt;
     if (checkTimer <= 0) { checkTimer = 0.5; checkSectors(); if (state.over) return; }
     updateWaves(dt);
+    updateRaids(dt);
     state.nextStrike -= dt;
     if (state.nextStrike <= 0) { state.nextStrike = STRIKE.gap[0] + Math.random() * (STRIKE.gap[1] - STRIKE.gap[0]); new Strike(); }
     for (const c of strikes) if (!c.dead) c.update(dt);
@@ -1460,6 +1527,6 @@
     queueUnit: queueUnit, queueUpgrade: queueUpgrade, select: select, command: command, step: step, newGame: newGame,
     continueGame: continueGame, saveGame: saveGame, toScreen: toScreen, camera: camera, cam: cam, placeCamera: placeCamera,
     lookTowards: lookTowards, travelTo: travelTo, toggleMap: toggleMap, Unit: Unit, Enemy: Enemy, Strike: Strike, fx: fx,
-    renderer: renderer, scene: scene, updateWaves: updateWaves
+    renderer: renderer, scene: scene, updateWaves: updateWaves, updateRaids: updateRaids
   };
 })(window.CC);

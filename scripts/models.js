@@ -1,4 +1,4 @@
-// Comet & Commander - textures, ship models, backdrop and effects (three.js r128)
+// Comets and the Commander - textures, ship models, backdrop and effects (three.js r128)
 window.CC = window.CC || {};
 (function (CC) {
   'use strict';

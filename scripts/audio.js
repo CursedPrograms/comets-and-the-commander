@@ -1,4 +1,4 @@
-// Comet & Commander - sound effects (Web Audio, synthesised) and Piper voice lines
+// Comets and the Commander - sound effects (Web Audio, synthesised) and Piper voice lines
 window.CC = window.CC || {};
 (function (CC) {
   'use strict';

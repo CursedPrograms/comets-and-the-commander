@@ -1,4 +1,4 @@
-// Comet & Commander - the ten enemy factions, one per sector, easiest first.
+// Comets and the Commander - the ten enemy factions, one per sector, easiest first.
 // Each has its own colours, ship designs (shapes in models.js) and behaviour (game.js).
 window.CC = window.CC || {};
 (function (CC) {

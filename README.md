@@ -24,7 +24,7 @@
   </div>
 <br>
 
-# Comet & Commander
+# Comets and the Commander
 
 A 3D space RTS that runs in the browser. You fly the Commander, a carrier, through a sphere of space made of ten sectors, each held by a different enemy faction. The battle happens all around you: mine comets and asteroids, build a fleet, research upgrades and conquer every sector.
 
@@ -36,6 +36,8 @@ A 3D space RTS that runs in the browser. You fly the Commander, a carrier, throu
 
 - **Ten sectors, ten factions.** Each sector has its own enemy with its own colours, ship designs and tactics: Rust Drones swarm, Ice Wraiths hunt your harvesters, Crimson Reavers ram, Void Lancers snipe from range, Gold Sentinels repair themselves, Teal Menders heal each other, Amber Splitters burst into smaller ships, the Obsidian Guard is shielded, and the Pale Choir in the last sector does all of it. Destroy every hive in a sector to conquer it; conquer all ten to win.
 - **Fly anywhere.** Select the Commander and right-click to move it, or pick a sector on the sector map. The battle sphere and your idle warships travel with you.
+- **Your sphere.** Your ships only fight inside the battle sphere round the Commander: an enemy or hive outside it is out of reach, and ships sent past its edge stop there. To take on a hive, fly the Commander to it.
+- **Waves.** The first wave comes after 75 seconds, then every 48 seconds or less (sooner in later sectors and as the waves go on), each bigger than the last, with heavies from early on. Every fifth wave is a big one. Every wave also sends raiders in from the edge of your sphere, from any side, so sitting still doesn't keep you safe. The other sectors' factions raid you too, wherever you are: their ships arrive at the edge of your sphere from the side their sector lies on, nearer sectors more often, bigger as the game goes on.
 - **Economy.** Harvesters mine comets and asteroids near the Commander and bring the ore home. Spend it on fighters, cruisers and more harvesters, built in the Commander's queue.
 - **Research.** Weapons, hulls, mining and logistics (cheaper, faster ships), three levels each. Conquering a sector pays a bonus.
 - **Comets.** Now and then a comet streaks in from any direction. A blinking line, an alarm and a voice warning give you a few seconds to get out of its way; it tears through anything it hits.

@@ -365,10 +365,144 @@ window.CC = window.CC || {};
     return m;
   }
 
-  function hive(f) {
+  // ---------- Your buildings: they float where they're built (all face +Z) ----------
+  function buildSolar() {
+    const g = new THREE.Group();
+    part(new THREE.CylinderGeometry(1.2, 1.4, 2.4, 10), M.hullDark, 0, 0, 0, g);
+    part(new THREE.CylinderGeometry(1.25, 1.25, 0.2, 10), M.stripe, 0, 0.6, 0, g);
+    const panelMat = new THREE.MeshStandardMaterial({ color: 0x0b2a4a, metalness: 0.9, roughness: 0.2, emissive: 0x062040, emissiveIntensity: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const arm = new THREE.Group();
+      part(new THREE.BoxGeometry(0.25, 0.25, 3.2), M.panel, 0, 0, 2.6, arm);
+      for (let k = 0; k < 3; k++) {
+        part(new THREE.BoxGeometry(2.6, 0.08, 1.5), panelMat, 0, 0, 2.0 + k * 1.65, arm);
+        part(new THREE.BoxGeometry(2.62, 0.09, 0.06), M.light, 0, 0, 2.0 + k * 1.65 + 0.76, arm);
+        part(new THREE.BoxGeometry(0.05, 0.09, 1.5), M.hull, 0, 0, 2.0 + k * 1.65, arm);
+      }
+      arm.rotation.y = i * Math.PI / 2;
+      g.add(arm);
+    }
+    const core = glowSprite(COL.amber, 6, 0.8); core.position.y = 1.6; g.add(core);
+    part(new THREE.SphereGeometry(0.6, 12, 8), M.light, 0, 1.4, 0, g);
+    return g;
+  }
+  function buildRefinery() {
+    const g = new THREE.Group();
+    part(new THREE.BoxGeometry(5, 2.6, 4), M.hull, 0, 0, 0, g);
+    part(new THREE.BoxGeometry(5.05, 0.25, 4.05), M.stripe, 0, 0.9, 0, g);
+    for (const sx of [-1.6, 0, 1.6]) {
+      part(new THREE.CylinderGeometry(0.8, 0.8, 3.2, 12), M.hullBlue, sx, 2.6, -0.6, g);
+      part(new THREE.SphereGeometry(0.8, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), M.hullBlue, sx, 4.2, -0.6, g);
+      part(new THREE.TorusGeometry(0.82, 0.06, 4, 16), M.light, sx, 3.2, -0.6, g).rotation.x = Math.PI / 2;
+    }
+    part(new THREE.TorusGeometry(1.6, 0.25, 8, 24), M.hullDark, 0, 0, 2.4, g);
+    part(new THREE.TorusGeometry(1.6, 0.08, 6, 24), M.stripe, 0, 0, 2.55, g);
+    part(new THREE.BoxGeometry(0.4, 0.4, 3), M.panel, 2.8, -0.8, 0, g);
+    return g;
+  }
+  function buildTech() {
+    const g = new THREE.Group();
+    part(new THREE.CylinderGeometry(2.6, 3.2, 1.4, 8), M.hullDark, 0, -0.6, 0, g);
+    part(new THREE.SphereGeometry(2.3, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.glass, 0, 0, 0, g);
+    for (let i = 0; i < 3; i++) {
+      const r = part(new THREE.TorusGeometry(3.2 + i * 0.6, 0.08, 6, 40), i === 1 ? M.stripe : M.light, 0, 0.6, 0, g);
+      r.rotation.x = Math.PI / 2 + i * 0.5; r.rotation.y = i * 0.8;
+    }
+    part(new THREE.CylinderGeometry(0.08, 0.08, 4, 5), M.panel, 0, 3, 0, g);
+    const tip = glowSprite(COL.pink, 3, 0.9); tip.position.y = 5.1; g.add(tip);
+    return g;
+  }
+  function buildTurretPlatform() {
+    const g = new THREE.Group();
+    part(new THREE.CylinderGeometry(2.2, 2.2, 0.5, 6), M.hullDark, 0, 0, 0, g);
+    part(new THREE.CylinderGeometry(2.25, 2.25, 0.12, 6), M.stripe, 0, 0.2, 0, g);
+    part(new THREE.ConeGeometry(1.2, 1.8, 6), M.hull, 0, -1.1, 0, g).rotation.x = Math.PI;
+    turret(g, -0.9, 0.3, 0, 1.6); turret(g, 0.9, 0.3, 0, 1.6);
+    return g;
+  }
+  function buildShipyard() {
+    const g = new THREE.Group();
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) part(new THREE.BoxGeometry(0.35, 0.35, 10), M.hull, sx * 2.6, sy * 1.8, 0, g);
+    for (let z = -4.5; z <= 4.5; z += 3) {
+      part(new THREE.BoxGeometry(5.6, 0.3, 0.3), M.hullDark, 0, 1.8, z, g);
+      part(new THREE.BoxGeometry(5.6, 0.3, 0.3), M.hullDark, 0, -1.8, z, g);
+      for (const sx of [-1, 1]) part(new THREE.BoxGeometry(0.3, 3.6, 0.3), M.hullDark, sx * 2.6, 0, z, g);
+      part(new THREE.BoxGeometry(0.15, 0.15, 0.15), M.light, 2.8, 1.9, z, g);
+      part(new THREE.BoxGeometry(0.15, 0.15, 0.15), M.stripe, -2.8, 1.9, z, g);
+    }
+    part(new THREE.BoxGeometry(2.4, 1.4, 2.6), M.hullBlue, 0, 2.8, -4, g);
+    part(new THREE.BoxGeometry(1.8, 0.3, 0.1), M.glass, 0, 2.9, -2.65, g);
+    return g;
+  }
+  function buildRepairDock() {
+    const g = new THREE.Group();
+    part(new THREE.TorusGeometry(3, 0.45, 8, 32), M.hull, 0, 0, 0, g);
+    part(new THREE.TorusGeometry(3, 0.12, 6, 32), M.light, 0, 0, 0.45, g);
+    part(new THREE.SphereGeometry(1, 14, 10), M.hullBlue, 0, 0, 0, g);
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2;
+      const arm = part(new THREE.BoxGeometry(0.25, 2.2, 0.25), M.panel, Math.cos(a) * 1.9, Math.sin(a) * 1.9, 0, g);
+      arm.rotation.z = a - Math.PI / 2;
+    }
+    g.add(glowSprite(COL.light, 5, 0.7));
+    return g;
+  }
+  // your very special ship: twice a cruiser, with a lance at the bow
+  function buildDreadnought() {
+    const g = new THREE.Group();
+    const c = buildCruiser(); c.scale.setScalar(2); g.add(c);
+    part(alongZ(new THREE.CylinderGeometry(0.25, 0.5, 6, 8)), M.hullDark, 0, 0.3, 11, g);
+    part(alongZ(new THREE.CylinderGeometry(0.12, 0.12, 6.2, 6)), M.stripe, 0, 0.75, 11, g);
+    const tip = glowSprite(COL.pink, 4, 0.9); tip.position.set(0, 0.3, 14.2); g.add(tip);
+    for (const sx of [-1, 1]) turret(g, sx * 2.6, 0.4, -2, 1.4);
+    return g;
+  }
+  // the Usurper: takes over hives with its ring
+  function buildCaptor() {
+    const g = new THREE.Group();
+    part(sideHull([[1.8, 0], [0.8, 0.5], [-1.4, 0.5], [-1.8, 0], [-1.4, -0.5], [0.8, -0.4]], 1.2, 0.08), M.hullBlue, 0, 0, 0, g);
+    part(new THREE.TorusGeometry(1.5, 0.16, 8, 28), M.hull, 0, 0, 0.6, g);
+    part(new THREE.TorusGeometry(1.5, 0.06, 6, 28), M.stripe, 0, 0, 0.75, g);
+    part(alongZ(new THREE.ConeGeometry(0.35, 1.2, 8)), M.light, 0, 0, 2.2, g);
+    engine(g, 0.4, 0, -1.9, 0.22, 0.45); engine(g, -0.4, 0, -1.9, 0.22, 0.45);
+    return g;
+  }
+  function solar() { const m = make('solar', buildSolar); m.size = 5; return m; }
+  function refinery() { const m = make('refinery', buildRefinery); m.size = 4.5; return m; }
+  function tech() { const m = make('tech', buildTech); m.size = 4.5; return m; }
+  function turretPlatform() { const m = make('turretPlatform', buildTurretPlatform); m.size = 3; return m; }
+  function shipyard() { const m = make('shipyard', buildShipyard); m.size = 5.5; return m; }
+  function repairDock() { const m = make('repairDock', buildRepairDock); m.size = 4; return m; }
+  function dreadnought() { const m = make('dreadnought', buildDreadnought); m.size = 9; return m; }
+  function captor() { const m = make('captor', buildCaptor); m.size = 2.4; return m; }
+  // a rival Overlord: the carrier in its faction's colours
+  const rivalTemplates = {};
+  function rivalCarrier(f) {
+    materials();
+    if (!rivalTemplates[f.id]) {
+      const g = buildCarrier();
+      g.traverse((o) => {
+        if (o.isSprite) { o.material = o.material.clone(); o.material.color.setHex(f.glow); return; }
+        if (!o.isMesh) return;
+        if (o.material === M.hull || o.material === M.hazard) o.material = f.mats.hull;
+        else if (o.material === M.hullBlue || o.material === M.hullDark) o.material = f.mats.hull2;
+        else if (o.material === M.stripe || o.material === M.light) o.material = f.mats.glow;
+        else if (o.material === M.flame) o.material = f.mats.flame;
+      });
+      rivalTemplates[f.id] = g;
+    }
+    const g = rivalTemplates[f.id].clone(true);
+    const info = { group: g, engines: [], turrets: [], drill: null, size: 11 };
+    g.traverse((o) => { if (o.userData.engine) info.engines.push(o); if (o.userData.turret) info.turrets.push(o); });
+    return info;
+  }
+
+  // kind 'nest': the hive you capture (pods round a glowing heart, a cage of rings); otherwise a spire to destroy
+  function hive(f, kind) {
     materials();
     const fm = f ? f.mats : fmats(true);
-    const shape = f ? f.hive : 'spikes';
+    const nest = kind === 'nest';
+    const shape = nest ? 'pods' : (f ? f.hive : 'spikes');
     const g = new THREE.Group();
     g.add(part(new THREE.IcosahedronGeometry(4.5, shape === 'smooth' ? 2 : 1), fm.hull));
     const dirs = new THREE.IcosahedronGeometry(1, 0).attributes.position;
@@ -388,8 +522,12 @@ window.CC = window.CC || {};
     }
     g.add(part(new THREE.TorusGeometry(6.2, 0.3, 6, 40), fm.glow));
     const ring2 = part(new THREE.TorusGeometry(7.2, 0.15, 6, 40), fm.glow); ring2.rotation.x = Math.PI / 2; g.add(ring2);
-    const core = glowSprite(fm.colour, 18, 0.55); g.add(core);
-    return { group: g, core: core, size: 7 };
+    if (nest) {
+      for (let i = 0; i < 3; i++) { const r = part(new THREE.TorusGeometry(9, 0.12, 6, 48), fm.glow); r.rotation.set(i * 1.05, i * 0.6, 0); g.add(r); }
+      g.scale.setScalar(0.85);
+    }
+    const core = glowSprite(nest ? 0xffffff : fm.colour, nest ? 22 : 18, 0.55); g.add(core);
+    return { group: g, core: core, size: nest ? 7.5 : 7 };
   }
 
   // ---------- Faction ships: shapes coloured by each sector's materials ----------
@@ -676,6 +814,21 @@ window.CC = window.CC || {};
     fx.push({ kind: 'line', obj: l, life: 0.15, max: 0.15 });
   }
 
+  // power: a jagged spark of electricity from a to b
+  function zap(a, b, colour) {
+    const pts = [a.clone()];
+    const n = 7, d = a.distanceTo(b);
+    for (let i = 1; i < n; i++) {
+      const p = a.clone().lerp(b, i / n);
+      p.x += (Math.random() - 0.5) * d * 0.06; p.y += (Math.random() - 0.5) * d * 0.06; p.z += (Math.random() - 0.5) * d * 0.06;
+      pts.push(p);
+    }
+    pts.push(b.clone());
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: colour, blending: THREE.AdditiveBlending, transparent: true }));
+    scene.add(l);
+    fx.push({ kind: 'line', obj: l, life: 0.22, max: 0.22 });
+  }
+
   // engine exhaust trails: one shared particle buffer
   const TRAIL_N = 2400;
   let trailPts = null, trailPos, trailCol, trailBase, trailLife, trailHead = 0;
@@ -772,6 +925,6 @@ window.CC = window.CC || {};
 
   COL.enemy = ENEMY_GLOW;
   CC.COL = COL;
-  CC.models = { factionMats: factionMats, factionShip: factionShip, environment: environment, fighter: fighter, cruiser: cruiser, harvester: harvester, mothership: mothership, raider: raider, destroyer: destroyer, hive: hive, comet: comet, asteroid: asteroid, glowSprite: glowSprite, ringSprite: ringSprite, backdrop: backdrop };
-  CC.fx = { trail: trail, setScene: setScene, bolt: bolt, spark: spark, explosion: explosion, shieldFlash: shieldFlash, line: line, update: update, clear: clear };
+  CC.models = { factionMats: factionMats, factionShip: factionShip, environment: environment, fighter: fighter, cruiser: cruiser, harvester: harvester, mothership: mothership, raider: raider, destroyer: destroyer, hive: hive, solar: solar, refinery: refinery, tech: tech, turretPlatform: turretPlatform, shipyard: shipyard, repairDock: repairDock, dreadnought: dreadnought, captor: captor, rivalCarrier: rivalCarrier, comet: comet, asteroid: asteroid, glowSprite: glowSprite, ringSprite: ringSprite, backdrop: backdrop };
+  CC.fx = { trail: trail, setScene: setScene, bolt: bolt, spark: spark, explosion: explosion, shieldFlash: shieldFlash, line: line, zap: zap, update: update, clear: clear };
 })(window.CC);

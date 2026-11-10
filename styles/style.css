@@ -123,6 +123,10 @@ html, body {
 
 .button.upgrade { border-color: var(--pink); }
 
+.button.build { border-color: #ffc977; }
+
+#controls .button { padding: 7px 11px; font-size: 14px; }
+
 .button .lvl { color: var(--blue-light); }
 
 .button.secondary {

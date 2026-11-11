@@ -28,7 +28,7 @@
 
 A 3D space RTS that runs in the browser. You fly the Commander, a carrier, through a sphere of space made of ten sectors, each held by a different enemy faction. The battle happens all around you: mine comets and asteroids, build a fleet, research upgrades and conquer every sector.
 
-**Play it:** [cursedprograms.github.io/comet-and-commander](https://cursedprograms.github.io/comet-and-commander/)
+**Play it:** [cursedprograms.github.io/comets-and-the-commander](https://cursedprograms.github.io/comets-and-the-commander/)
 
 ![A battle around the Commander](images/battle.jpg)
 

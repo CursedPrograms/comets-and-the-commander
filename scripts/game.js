@@ -37,6 +37,7 @@
   function voiceOf(t) { return isH(t) ? 'harvester' : (t === 'fighter' || t === 'cruiser' ? t : 'cruiser'); }
   UNIT.pathfinder = { name: 'Pathfinder', cost: { s: 250, f: 120 }, build: 12, hp: 600, dmg: 9, range: 22, rate: 0.3, speed: 20, accel: 3, turn: 3, aggro: 30, bolt: 80, heavy: false, max: 1 };
   const PILOT = { thrust: 34, max: 46, boost: 1.8, turn: 1.9, fuelOut: 2.5 };     // fuel a second, outside the sphere
+  const HARVEST_AREA = 22;   // a harvester's area: the rocks this close to where it's mining (a field is ~16 across)
   const HOLE = { cost: { f: 250 }, life: 20, pull: 38, horizon: 4.5, strength: 26, max: 3 };
   const CAP = { warships: 250, harvesters: 20, enemies: 100, overlord: 250, queue: 20 };   // a faction's ships at once: 250 with an Overlord, else 100
   const ENEMY = {
@@ -117,8 +118,39 @@
   models.backdrop(sky);
   fx.setScene(scene);
 
+  // The area spheres (the Commander's, every building's, every captured nest's) are drawn as one shape: each skips
+  // the parts of its wireframe that lie inside another sphere, so where spheres overlap only the outer skin shows,
+  // and a sphere wholly inside another isn't drawn at all. updateSphereUnion() passes them all to the shader.
+  const SPHERES_MAX = 48;
+  const sphereUnion = { uSpheres: { value: Array.from({ length: SPHERES_MAX }, () => new THREE.Vector4()) }, uSphereCount: { value: 0 } };
+  const unionMeshes = [];
+  function unionSphere(mesh) {
+    mesh.material.onBeforeCompile = (sh) => {
+      sh.uniforms.uSpheres = sphereUnion.uSpheres;
+      sh.uniforms.uSphereCount = sphereUnion.uSphereCount;
+      sh.vertexShader = 'varying vec3 vUnionPos;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n  vUnionPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = 'varying vec3 vUnionPos;\nuniform vec4 uSpheres[' + SPHERES_MAX + '];\nuniform int uSphereCount;\n' +
+        sh.fragmentShader.replace('void main() {', 'void main() {\n  for (int i = 0; i < ' + SPHERES_MAX + '; i++) {\n' +
+          '    if (i >= uSphereCount) break;\n' +
+          '    if (distance(vUnionPos, uSpheres[i].xyz) < uSpheres[i].w * 0.995) discard;   // inside another sphere\n  }');
+    };
+    unionMeshes.push(mesh);
+    return mesh;
+  }
+  function updateSphereUnion() {
+    let n = 0;
+    for (let i = unionMeshes.length - 1; i >= 0; i--) {
+      const m = unionMeshes[i];
+      if (!m.parent) { unionMeshes.splice(i, 1); continue; }       // its building or nest is gone
+      if (!m.visible || n >= SPHERES_MAX) continue;
+      sphereUnion.uSpheres.value[n++].set(m.position.x, m.position.y, m.position.z, m.geometry.parameters.radius * m.scale.x);
+    }
+    sphereUnion.uSphereCount.value = n;
+  }
+
   // faint sphere showing the battle area around the Commander
-  const edge = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 16), new THREE.MeshBasicMaterial({ color: COL.dark, wireframe: true, transparent: true, opacity: 0.1, depthWrite: false }));
+  const edge = unionSphere(new THREE.Mesh(new THREE.SphereGeometry(R, 32, 16), new THREE.MeshBasicMaterial({ color: COL.dark, wireframe: true, transparent: true, opacity: 0.1, depthWrite: false })));
   scene.add(edge);
 
   // ---------- Camera: orbit freely (360 degrees) around the Commander ----------
@@ -575,18 +607,26 @@
       const o = this.order;
       if (this.drill) this.drill.rotation.z += dt * (this.hstate === 'mine' ? 14 : 1);
       if (o && o.kind === 'move') { if (this.steer(o.point, t.speed, dt, 1.5)) this.order = null; return; }
-      if (o && o.kind === 'harvest') { this.rock = o.rock; this.order = null; this.hstate = this.cargo >= cap ? 'return' : 'seek'; this.manual = true; }
+      if (o && o.kind === 'harvest') { this.rock = o.rock; this.area = o.rock.pos.clone(); this.order = null; this.hstate = this.cargo >= cap ? 'return' : 'seek'; this.manual = true; }
       if (this.hstate === 'seek') {
-        // the nearest rock within reach of the Commander (or the one you picked)
-        if (!this.rock || this.rock.dead || (!this.manual && d2(this.rock.pos, commander.pos) > 160 * 160)) {
+        // A harvester works one area (the field it's mining) until every rock there of its kind is gone, then the
+        // field nearest that area. A rock is in reach near the Commander or near one of its drop-offs (refineries,
+        // or smelters for aluminium), so a field by a refinery is still worked after the Commander has moved on.
+        const docks = buildings.filter((b) => !b.dead && b.kind === (t.res === 'a' ? 'smelter' : 'refinery'));
+        const inReach = (r, k) => d2(r.pos, commander.pos) < k * k || docks.some((b) => d2(r.pos, b.pos) < k * k);
+        if (!this.rock || this.rock.dead || (!this.manual && !inReach(this.rock, 160))) {
           this.rock = null; this.manual = false;
-          let best = Infinity;
+          const from = this.area || this.pos;
+          let best = Infinity, bestArea = Infinity, inArea = null;
           for (const r of rocks) {
-            if (r.dead || RES_OF_ROCK[r.kind] !== t.res || d2(r.pos, commander.pos) > 140 * 140) continue;
+            if (r.dead || RES_OF_ROCK[r.kind] !== t.res || !inReach(r, 140)) continue;
             if (hives.some((h) => !h.dead && d2(h.pos, r.pos) < 55 * 55)) continue;     // not under an enemy hive's guns
-            const d = d2(r.pos, this.pos);
+            const d = d2(r.pos, from);
+            if (this.area && d < HARVEST_AREA * HARVEST_AREA && d < bestArea) { bestArea = d; inArea = r; }
             if (d < best) { best = d; this.rock = r; }
           }
+          if (inArea) this.rock = inArea;                 // the area isn't used up yet: stay
+          if (this.rock) this.area = this.rock.pos.clone();
         }
         if (!this.rock) {
           if (this.cargo > 0) this.hstate = 'return';
@@ -951,7 +991,7 @@
       this.hp = Math.min(this.maxHp, hp);
       this.pos.copy(pos);
       this.buildTimer = 6;
-      this.sphere = new THREE.Mesh(new THREE.SphereGeometry(OUTPOST_R, 24, 12), new THREE.MeshBasicMaterial({ color: COL.pink, wireframe: true, transparent: true, opacity: 0.07, depthWrite: false }));
+      this.sphere = unionSphere(new THREE.Mesh(new THREE.SphereGeometry(OUTPOST_R, 24, 12), new THREE.MeshBasicMaterial({ color: COL.pink, wireframe: true, transparent: true, opacity: 0.07, depthWrite: false })));
       this.sphere.position.copy(pos);
       scene.add(this.sphere);
       this.mesh.add(models.glowSprite(COL.pink, 26, 0.35));
@@ -998,7 +1038,7 @@
       this.offset = pos.clone().sub(commander.pos);
       this.zapTimer = Math.random();
       if (kind === 'smelter') { this.mesh.add(models.glowSprite(0xeaf7ff, 16, 0.55)); this.mesh.scale.setScalar(0.9); }
-      this.sphere = new THREE.Mesh(new THREE.SphereGeometry(BUILD_R, 20, 10), new THREE.MeshBasicMaterial({ color: COL.light, wireframe: true, transparent: true, opacity: 0.035, depthWrite: false }));
+      this.sphere = unionSphere(new THREE.Mesh(new THREE.SphereGeometry(BUILD_R, 20, 10), new THREE.MeshBasicMaterial({ color: COL.light, wireframe: true, transparent: true, opacity: 0.035, depthWrite: false })));
       this.sphere.position.copy(pos);
       scene.add(this.sphere);
       buildings.push(this);
@@ -1276,7 +1316,7 @@
       this.mesh = this.model.group;
       this.mesh.userData.entity = this;
       this.radius = this.model.size;
-      this.max = kind === 'comet' ? Math.round(rand(900, 1300)) : kind === 'fuel' ? Math.round(rand(250, 380)) : kind === 'alu' ? Math.round(rand(160, 240)) : Math.round(rand(350, 500));
+      this.max = kind === 'comet' ? Math.round(rand(900, 1300)) : kind === 'fuel' ? Math.round(worldVersion >= 2 ? rand(500, 700) : rand(250, 380)) : kind === 'alu' ? Math.round(rand(160, 240)) : Math.round(rand(350, 500));
       this.amount = amount === undefined ? this.max : amount;
       this.spin = randDir().multiplyScalar(rand(0.1, 0.4));
       this.centre = centre.clone();
@@ -1881,6 +1921,8 @@
     else if (k === 'j') nextSphere();
     else if (k === 'x') selectArmy();
     else if (k === 'z') selectHarvesters();
+    else if (k === 'k') stayHere();
+    else if (k === 'l') followCommander();
     else if (k === 'b') selectBase();
     else if (k === 'n') toggleMap();
     else if (k === 'p' || k === ' ') { e.preventDefault(); togglePause(); }
@@ -1914,6 +1956,39 @@
   function selectArmy() { focus = null; select(units.filter((u) => !isH(u.type) && u.type !== 'captor' && !u.home), false); }
   function selectHarvesters() { select(units.filter((u) => isH(u.type)), false); }
   function selectBase() { focus = null; if (alive(commander)) select([commander], false); }
+
+  // Stances for the selected warships: Stay (K) posts each at the nearest of your buildings or captured nests, to
+  // guard it whatever the Commander does; Follow (L) brings them back to the Commander's escort.
+  function warshipsSelected() { return myShips().filter((u) => !isH(u.type) && u.type !== 'pathfinder'); }
+  function stayHere() {
+    const ships = warshipsSelected();
+    if (!ships.length) { flash('Select warships first, then Stay (K) keeps them by the nearest building.'); sfx.denied(); return; }
+    const posts = buildings.filter(alive).concat(outposts.filter(alive));
+    if (!posts.length) { flash('Nothing to stay by yet: build something first (Base tab).'); sfx.denied(); return; }
+    let placed = 0;
+    for (const u of ships) {
+      const b = nearest(posts, u.pos, Infinity);
+      if (!b) continue;
+      u.post = b;
+      // keep the spot it's at when that's inside the post's sphere, else a spot round the post
+      const off = u.pos.clone().sub(b.pos);
+      if (off.length() > BUILD_R * 0.7 || off.length() < b.radius + 4) off.copy(u.axis).multiplyScalar(b.radius + 8 + Math.random() * 10);
+      u.escort = off;
+      u.order = { kind: 'move', point: b.pos.clone().add(off) };
+      placed++;
+    }
+    sfx.order(); flash(plural(placed, 'ship') + ' staying by ' + (placed === 1 ? 'its' : 'the nearest') + ' building. Follow (L) brings them back to the Commander.');
+  }
+  function followCommander() {
+    const ships = warshipsSelected();
+    if (!ships.length) { flash('Select warships first, then Follow (L) sends them to the Commander.'); sfx.denied(); return; }
+    for (const u of ships) {
+      u.post = null; u.home = null;
+      u.escort = u.axis.clone().multiplyScalar(14 + Math.random() * 10);
+      u.order = { kind: 'move', point: commander.pos.clone().add(u.escort) };
+    }
+    sfx.order(); say(voiceOf(ships[0].type) + '_move', 0); flash(plural(ships.length, 'ship') + ' following the Commander.');
+  }
 
   // Buttons
   $('build-fighter').addEventListener('click', () => queueUnit('fighter'));
@@ -1953,6 +2028,8 @@
   for (const k of Object.keys(UPGRADES)) $('up-' + k).addEventListener('click', () => queueUpgrade(k));
   $('select-army').addEventListener('click', selectArmy);
   $('select-harvesters').addEventListener('click', selectHarvesters);
+  $('stay').addEventListener('click', stayHere);
+  $('follow').addEventListener('click', followCommander);
   $('select-base').addEventListener('click', selectBase);
   $('select-none').addEventListener('click', () => select([], false));
   $('home').addEventListener('click', resetCamera);
@@ -2258,8 +2335,13 @@
   }
 
   // The same seed builds the same world; a save keeps the seed plus what changed.
+  // the world's layout version: 2 made fuel the easiest resource (more, nearer, bigger green fields). Saves from
+  // before it carry no version and rebuild the old layout, so their rocks still line up.
+  const WORLD = 2;
+  let worldVersion = WORLD;
   function buildWorld(seed, saved) {
     clearWorld();
+    worldVersion = saved ? (saved.world || 1) : WORLD;
     rng = seeded(seed);
     const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28)));
     const pts = [];
@@ -2296,12 +2378,15 @@
         }
       }
     }
-    // green meteorites (fuel): rarer, further out in each sector
+    // green meteorites (fuel): the easiest resource: more fields than steel, near the sector centre, big rocks
+    // (world 1, older saves: rarer and further out)
+    const richFuel = worldVersion >= 2;
     for (const s of sectors) {
-      const n = s.level === 0 ? 1 : 1 + (s.level % 2);
+      const n = richFuel ? (s.level === 0 ? 5 : 3 + (s.level % 2)) : (s.level === 0 ? 1 : 1 + (s.level % 2));
       for (let f = 0; f < n; f++) {
-        const c = s.centre.clone().addScaledVector(randDir(), s.level === 0 ? rand(70, 100) : rand(60, 115));
-        for (let i = 0; i < 3; i++) {
+        const far = richFuel ? (s.level === 0 ? rand(18, 50) : rand(25, 80)) : (s.level === 0 ? rand(70, 100) : rand(60, 115));
+        const c = s.centre.clone().addScaledVector(randDir(), far);
+        for (let i = 0; i < (richFuel ? 4 : 3); i++) {
           new Rock('fuel', s.centre, c.clone().addScaledVector(randDir(), rand(3, 7)), saved ? saved.rocks[rockIndex] : undefined);
           rockIndex++;
         }
@@ -2387,7 +2472,7 @@
   function saveGame(announce) {
     if (!state || !state.started || state.over) return;
     const data = {
-      seed: state.seed, time: state.time, steel: state.steel, water: state.water, fuel: state.fuel, aluminium: state.aluminium, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
+      world: worldVersion, seed: state.seed, time: state.time, steel: state.steel, water: state.water, fuel: state.fuel, aluminium: state.aluminium, mined: state.mined, kills: state.kills, up: state.up, nextStrike: state.nextStrike,
       nextRaid: state.nextRaid, raids: state.raids,
       sectors: sectors.map((s) => ({ visited: s.visited, conquered: s.conquered, wave: s.wave, nextWave: s.nextWave })),
       hives: [].concat.apply([], sectors.map((s) => s.hives.filter((h) => !h.nest).map((h) => (h.dead ? 0 : Math.round(h.hp))))),
@@ -2399,7 +2484,16 @@
       buildings: buildings.filter(alive).map((b) => ({ kind: b.kind, pos: b.pos.toArray(), hp: Math.round(b.hp) })),
       rocks: rocks.map((r) => Math.round(r.amount)),
       commander: { pos: commander.pos.toArray(), hp: commander.hp, queue: commander.queue, bqueue: commander.bqueue, uqueue: commander.uqueue },
-      units: units.filter((u) => alive(u) && u.type !== 'turncoat').map((u) => ({ type: u.type, pos: u.pos.toArray(), hp: u.hp, cargo: u.cargo }))
+      // post: the building (b: its place in the list above) or captured nest (n: the nest's number) a ship stays by
+      units: units.filter((u) => alive(u) && u.type !== 'turncoat').map((u) => {
+        const s = { type: u.type, pos: u.pos.toArray(), hp: u.hp, cargo: u.cargo };
+        if (u.post && alive(u.post)) {
+          const bi = buildings.filter(alive).indexOf(u.post);
+          if (bi >= 0) s.post = { b: bi, off: u.escort.toArray() };
+          else if (u.post.nestIndex !== undefined) s.post = { n: u.post.nestIndex, off: u.escort.toArray() };
+        }
+        return s;
+      })
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { return; }
     if (announce) say('announce_saved', 60);
@@ -2412,7 +2506,7 @@
     Object.assign(state, { time: data.time, steel: data.steel !== undefined ? data.steel : (data.resources || 0), water: data.water || 0, fuel: data.fuel || 0, aluminium: data.aluminium || 0, mined: data.mined, kills: data.kills, up: data.up, nextStrike: data.nextStrike,
       nextRaid: data.nextRaid === undefined ? RAIDS.first : data.nextRaid, raids: data.raids || 0 });
     state.up = Object.assign(freshState(0).up, data.up);
-    buildWorld(data.seed, { hives: data.hives, rocks: data.rocks, commander: data.commander, nests: data.nests, rivals: data.rivals });
+    buildWorld(data.seed, { world: data.world, hives: data.hives, rocks: data.rocks, commander: data.commander, nests: data.nests, rivals: data.rivals });
     data.sectors.forEach((s, i) => Object.assign(sectors[i], s));
     commander.maxHp = 3000 * (1 + 0.25 * state.up.armour);
     commander.hp = data.commander.hp;
@@ -2425,6 +2519,10 @@
     for (const u of data.units) {
       const unit = new Unit(u.type, new THREE.Vector3().fromArray(u.pos));
       unit.hp = Math.min(unit.maxHp, u.hp); unit.cargo = u.cargo || 0;
+      if (u.post) {   // the building or captured nest it was told to stay by
+        const post = u.post.b !== undefined ? buildings[u.post.b] : outposts.find((o) => o.nestIndex === u.post.n);
+        if (post && alive(post)) { unit.post = post; if (u.post.off) unit.escort = new THREE.Vector3().fromArray(u.post.off); }
+      }
     }
     begin();
     flash('Welcome back, Commander.');
@@ -2536,6 +2634,7 @@
     }
     placeCamera();
     edge.position.copy(cam.target);
+    updateSphereUnion();
     sky.position.copy(camera.position);
     for (const e of units.concat(enemies, hives, buildings, outposts, rivals, enemyBuildings, [commander])) if (e && e.shieldGlow > 0) e.shieldGlow -= dt;
     if (markerLife > 0) { markerLife -= dt; markerSprite.material.opacity = Math.max(0, markerLife / 0.7); markerSprite.scale.setScalar(3 + (0.7 - markerLife) * 6); if (markerLife <= 0) markerSprite.visible = false; }
